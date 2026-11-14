@@ -4,9 +4,9 @@
 
 **让 Linux NVIDIA GPU 服务器一条命令变成可直接粘贴到围棋软件的私密 WSS 算力。**
 
-[![CI](https://github.com/wimi321/katago-remote-one-click/actions/workflows/ci.yml/badge.svg)](https://github.com/wimi321/katago-remote-one-click/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/wimi321/katago-remote-one-click)](https://github.com/wimi321/katago-remote-one-click/releases/latest)
-[![License](https://img.shields.io/github/license/wimi321/katago-remote-one-click)](LICENSE)
+[![CI](https://github.com/ykrsama/katago-remote-one-click/actions/workflows/ci.yml/badge.svg)](https://github.com/ykrsama/katago-remote-one-click/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ykrsama/katago-remote-one-click)](https://github.com/ykrsama/katago-remote-one-click/releases/latest)
+[![License](https://img.shields.io/github/license/ykrsama/katago-remote-one-click)](LICENSE)
 
 [English](README.md) | [故障排查](docs/TROUBLESHOOTING.zh-CN.md) | [安全说明](SECURITY.md)
 
@@ -19,7 +19,7 @@
 准备一台 **Linux x86_64 + NVIDIA 显卡**的服务器。租用服务器时优先选择带 **CUDA 12 + cuDNN 9** 的系统镜像，然后在终端运行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wimi321/katago-remote-one-click/v0.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.0/install.sh | bash
 ```
 
 首次安装会下载数百 MB 文件，耗时取决于服务器网络。每个文件使用前都会核对固定 SHA-256，下载损坏或内容被替换时会立即停止。
@@ -38,7 +38,7 @@ wss://example-name.trycloudflare.com/katago/<私密令牌>
 
 没有自己的 GPU 服务器时，可以使用带步骤说明的 Colab 笔记本。Colab 是否提供 GPU、GPU 型号和使用时长都由 Google 决定，本项目无法保证。
 
-[![在 Colab 中打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/wimi321/katago-remote-one-click/blob/v0.1.0/colab/KataGo_Remote_One_Click.ipynb)
+[![在 Colab 中打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ykrsama/katago-remote-one-click/blob/v0.1.0/colab/KataGo_Remote_One_Click.ipynb)
 
 ## 安装了什么
 
@@ -77,7 +77,7 @@ katago-remote doctor      # 检查显卡、文件和 KataGo 是否能启动
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/wimi321/katago-remote-one-click/v0.1.0/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.0/install.sh
 
 KATAGO_REMOTE_KATAGO_PATH=/opt/katago/katago \
 KATAGO_REMOTE_MODEL_PATH=/opt/katago/model.bin.gz \

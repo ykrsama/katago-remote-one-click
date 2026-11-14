@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	appconfig "github.com/wimi321/katago-remote-one-click/internal/config"
+	appconfig "github.com/ykrsama/katago-remote-one-click/internal/config"
 )
 
 type ProcessState struct {

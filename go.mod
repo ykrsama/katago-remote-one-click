@@ -1,6 +1,6 @@
-module github.com/wimi321/katago-remote-one-click
+module github.com/ykrsama/katago-remote-one-click
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/coder/websocket v1.8.15

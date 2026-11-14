@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/wimi321/katago-remote-one-click/internal/service"
+	"github.com/ykrsama/katago-remote-one-click/internal/service"
 )
 
 func TestPublicQuickTunnelRoundTrip(t *testing.T) {

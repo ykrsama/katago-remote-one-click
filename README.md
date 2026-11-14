@@ -4,9 +4,9 @@
 
 **Turn a Linux NVIDIA GPU server into a private KataGo WSS endpoint with one command.**
 
-[![CI](https://github.com/wimi321/katago-remote-one-click/actions/workflows/ci.yml/badge.svg)](https://github.com/wimi321/katago-remote-one-click/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/wimi321/katago-remote-one-click)](https://github.com/wimi321/katago-remote-one-click/releases/latest)
-[![License](https://img.shields.io/github/license/wimi321/katago-remote-one-click)](LICENSE)
+[![CI](https://github.com/ykrsama/katago-remote-one-click/actions/workflows/ci.yml/badge.svg)](https://github.com/ykrsama/katago-remote-one-click/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ykrsama/katago-remote-one-click)](https://github.com/ykrsama/katago-remote-one-click/releases/latest)
+[![License](https://img.shields.io/github/license/ykrsama/katago-remote-one-click)](LICENSE)
 
 [中文说明](README.zh-CN.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) | [Security](SECURITY.md)
 
@@ -19,7 +19,7 @@ No firewall rule, domain, TLS certificate, Python environment, or Cloudflare acc
 Use a Linux x86_64 server with an NVIDIA GPU. Choose a CUDA 12 image with cuDNN 9 when your provider offers one, then run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wimi321/katago-remote-one-click/v0.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.0/install.sh | bash
 ```
 
 The command downloads several hundred megabytes. Every downloaded file is checked against a pinned SHA-256 digest before it is used.
@@ -38,7 +38,7 @@ In LizzieYzy Next, open **Remote Compute > Custom Compute**, paste the complete 
 
 You can also use the guided notebook. Colab GPU availability and session duration are controlled by Google and are not guaranteed.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/wimi321/katago-remote-one-click/blob/v0.1.0/colab/KataGo_Remote_One_Click.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ykrsama/katago-remote-one-click/blob/v0.1.0/colab/KataGo_Remote_One_Click.ipynb)
 
 ## What gets installed
 
@@ -77,7 +77,7 @@ The installer can keep an existing KataGo executable, model, or analysis config 
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/wimi321/katago-remote-one-click/v0.1.0/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.0/install.sh
 
 KATAGO_REMOTE_KATAGO_PATH=/opt/katago/katago \
 KATAGO_REMOTE_MODEL_PATH=/opt/katago/model.bin.gz \

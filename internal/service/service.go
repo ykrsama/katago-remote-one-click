@@ -18,8 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wimi321/katago-remote-one-click/internal/bridge"
-	appconfig "github.com/wimi321/katago-remote-one-click/internal/config"
+	"github.com/ykrsama/katago-remote-one-click/internal/bridge"
+	appconfig "github.com/ykrsama/katago-remote-one-click/internal/config"
 )
 
 type InitOptions struct {

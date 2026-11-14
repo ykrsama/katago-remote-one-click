@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	appconfig "github.com/wimi321/katago-remote-one-click/internal/config"
-	"github.com/wimi321/katago-remote-one-click/internal/service"
+	appconfig "github.com/ykrsama/katago-remote-one-click/internal/config"
+	"github.com/ykrsama/katago-remote-one-click/internal/service"
 )
 
 var version = "dev"
