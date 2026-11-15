@@ -80,11 +80,12 @@ func TestValidateTunnelHostname(t *testing.T) {
 }
 
 func TestNamedTunnelConfigValidation(t *testing.T) {
+	dir := t.TempDir()
 	cfg := Default()
-	cfg.KataGoPath = "/tmp/katago"
-	cfg.ModelPath = "/tmp/model"
-	cfg.AnalysisConfig = "/tmp/analysis.cfg"
-	cfg.CloudflaredPath = "/tmp/cloudflared"
+	cfg.KataGoPath = filepath.Join(dir, "katago")
+	cfg.ModelPath = filepath.Join(dir, "model.bin.gz")
+	cfg.AnalysisConfig = filepath.Join(dir, "analysis.cfg")
+	cfg.CloudflaredPath = filepath.Join(dir, "cloudflared")
 
 	cfg.TunnelMode = TunnelModeNamed
 	if err := cfg.Validate(); err == nil {

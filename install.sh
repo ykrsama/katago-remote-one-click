@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="v0.1.0"
+VERSION="v0.1.1"
 REPOSITORY="ykrsama/katago-remote-one-click"
 
 APP_URL="https://github.com/${REPOSITORY}/releases/download/${VERSION}/katago-remote-linux-amd64"
-APP_SHA256="c1e9af69a0d2af0a6e9576380c4c8b78b352528c37741f88fce3a10d181a0418"
+APP_SHA256="c18ec68c1bf300fec0b8544b1ff7d0143e7b006834e00b9bf42aa512a4ee5491"
 
 CLOUDFLARED_VERSION="2026.8.3"
 CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
@@ -34,7 +34,7 @@ usage() {
 KataGo Remote One-Click / KataGo 远程算力一键部署
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.0/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.1/install.sh | bash
   bash install.sh [--no-start] [--dry-run]
 
 Options:

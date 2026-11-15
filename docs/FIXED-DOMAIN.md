@@ -2,7 +2,7 @@
 
 The default `trycloudflare.com` hostname comes from a Cloudflare Quick Tunnel and normally changes whenever the service or server restarts. If your domain (for example `ykrsama.org`) is hosted on Cloudflare, switch to a **named tunnel** and keep a stable address such as `wss://katago.ykrsama.org/katago/<private-token>`.
 
-> The named-tunnel support described here is implemented in the source tree and ships with the next release. The v0.1.0 release binary only supports quick tunnels; build from source as shown in [section 2c](#2c-build-from-source-before-a-release) until then.
+> Named tunnels are available from v0.1.1. The v0.1.0 release binary only supports quick tunnels; if the server still runs it, upgrade as shown in 2a.
 
 ## How the pieces connect
 
@@ -39,9 +39,26 @@ Key points:
 
 ## Step 2: Production server
 
-### 2a. Existing installation (switch from a quick tunnel)
+### 2a. Existing installation (upgrade from v0.1.0)
 
-Store the token in a root-only file, then point `init` at it:
+Check the binary first:
+
+```bash
+~/.local/bin/katago-remote version   # v0.1.1 or newer is required
+```
+
+The easiest upgrade is to rerun the installer with the tunnel variables. It only re-downloads the binary, because its hash changed, and reuses KataGo, the model, and the config:
+
+```bash
+curl -fsSLo /tmp/katago-remote-install.sh \
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.1/install.sh
+
+KATAGO_REMOTE_TUNNEL_HOSTNAME=katago.ykrsama.org \
+KATAGO_REMOTE_TUNNEL_TOKEN='eyJ...' \
+bash /tmp/katago-remote-install.sh
+```
+
+To avoid rerunning the installer, replace only the binary as shown in 2c and then run:
 
 ```bash
 umask 077
@@ -57,15 +74,15 @@ printf '%s\n' 'eyJ...your-tunnel-token...' > /root/katago-tunnel-token
 
 `init` only overwrites the fields you pass, so existing KataGo, model, config, listen address, and `maxVisits` values are kept.
 
-The token is copied to `~/.local/share/katago-remote-one-click/state/tunnel-token` with mode `600` and handed to cloudflared through the `TUNNEL_TOKEN` environment variable, so it never appears in the process arguments.
+The token is copied to `~/.local/share/katago-remote-one-click/state/tunnel-token` with mode `600` and handed to cloudflared through the `TUNNEL_TOKEN` environment variable, so it never appears in the process arguments. `/root/katago-tunnel-token` is only the input for `init` and can be deleted afterwards.
 
 ### 2b. New installation
 
-Once a release with fixed-hostname support is out, replace `<released-version>` with that tag (for example `v0.2.0`) and pass the variables to **Bash**, not to `curl`:
+With v0.1.1 or newer, pass the variables to **Bash**, not to `curl`:
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/<released-version>/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.1/install.sh
 
 KATAGO_REMOTE_TUNNEL_HOSTNAME=katago.ykrsama.org \
 KATAGO_REMOTE_TUNNEL_TOKEN='eyJ...' \
@@ -74,16 +91,16 @@ bash /tmp/katago-remote-install.sh
 
 Use `KATAGO_REMOTE_TUNNEL_TOKEN_FILE=/root/katago-tunnel-token` to keep the token out of your shell history. In a `curl ... | bash` pipeline the variables only reach `curl`, which is why the script is downloaded first.
 
-### 2c. Build from source before a release
+### 2c. Build from source (optional)
 
-Any machine with Go can produce the Linux binary, including your development machine:
+Use this only to replace the binary manually or to verify the source. Any machine with Go can produce the Linux binary, including your development machine:
 
 ```bash
 git clone https://github.com/ykrsama/katago-remote-one-click
 cd katago-remote-one-click
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -trimpath -buildvcs=false \
-  -ldflags "-s -w -X main.version=v0.2.0-dev" \
+  -ldflags "-s -w -X main.version=v0.1.1" \
   -o katago-remote-linux-amd64 ./cmd/katago-remote
 ```
 

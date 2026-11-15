@@ -2,7 +2,7 @@
 
 默认的 `trycloudflare.com` 是 Cloudflare Quick Tunnel 临时域名，服务或服务器重启后通常会变化。如果域名（例如 `ykrsama.org`）已经托管在 Cloudflare，可以改用**命名隧道**，把地址固定成 `wss://katago.ykrsama.org/katago/<私密令牌>`。
 
-> 本页描述源码中已经实现、随下一次发布提供的命名隧道支持。v0.1.0 的 release 二进制只支持临时域名；发布前可以先按[第 2c 节](#2c-发布前用源码构建二进制)自行构建。
+> 命名隧道从 v0.1.1 起提供。v0.1.0 的 release 二进制只支持临时域名；如果服务器上还是旧版本，先按 2a 升级。
 
 ## 整体链路
 
@@ -39,9 +39,26 @@ katago-remote bridge -> KataGo
 
 ## 步骤 2：生产服务器
 
-### 2a. 已经装过（从临时域名切换）
+### 2a. 已经装过（v0.1.0 升级并切换）
 
-把 token 存到只有 root 能读的文件里，再让 `init` 读取它：
+先确认版本：
+
+```bash
+~/.local/bin/katago-remote version   # 需要 v0.1.1 或更新
+```
+
+还是 `v0.1.0` 时，最省事的是带上隧道变量重跑安装器。它只会重新下载哈希已变化的二进制，KataGo、权重和配置会复用，并在最后写入命名隧道配置：
+
+```bash
+curl -fsSLo /tmp/katago-remote-install.sh \
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.1/install.sh
+
+KATAGO_REMOTE_TUNNEL_HOSTNAME=katago.ykrsama.org \
+KATAGO_REMOTE_TUNNEL_TOKEN='eyJ...' \
+bash /tmp/katago-remote-install.sh
+```
+
+如果不想重跑安装器，也可以按 2c 手动替换二进制，然后执行下面的命令：
 
 ```bash
 umask 077
@@ -57,15 +74,15 @@ printf '%s\n' 'eyJ...你的tunnel-token...' > /root/katago-tunnel-token
 
 `init` 只覆盖你明确传入的字段，不会重置已有的 KataGo、模型、配置、监听地址和 `maxVisits`。
 
-token 会被复制到 `~/.local/share/katago-remote-one-click/state/tunnel-token`（权限 `600`），并通过 `TUNNEL_TOKEN` 环境变量交给 cloudflared，因此不会出现在进程参数里。
+token 会被复制到 `~/.local/share/katago-remote-one-click/state/tunnel-token`（权限 `600`），并通过 `TUNNEL_TOKEN` 环境变量交给 cloudflared，因此不会出现在进程参数里。`/root/katago-tunnel-token` 只是 `init` 的输入，之后可以删除。
 
 ### 2b. 新装服务器
 
-等包含固定域名支持的版本发布后，把 `<已发布版本>` 换成该版本号（例如 `v0.2.0`），并把变量传给 **Bash** 而不是 `curl`：
+在 v0.1.1 及之后，把变量传给 **Bash**（而不是 `curl`）：
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/<已发布版本>/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.1/install.sh
 
 KATAGO_REMOTE_TUNNEL_HOSTNAME=katago.ykrsama.org \
 KATAGO_REMOTE_TUNNEL_TOKEN='eyJ...' \
@@ -76,16 +93,16 @@ bash /tmp/katago-remote-install.sh
 
 `curl ... | bash` 的写法里，变量只会传给 `curl`，Bash 看不到，所以必须像上面这样先下载脚本。
 
-### 2c. 发布前用源码构建二进制
+### 2c. 用源码构建二进制（可选）
 
-如果暂时不发布新版本，可以在任意一台有 Go 的机器上构建 Linux 二进制（本机开发环境也可以）：
+只在你想手动替换二进制、或需要自行验证源码时使用。任意一台有 Go 的机器都可以，包括本机开发环境：
 
 ```bash
 git clone https://github.com/ykrsama/katago-remote-one-click
 cd katago-remote-one-click
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -trimpath -buildvcs=false \
-  -ldflags "-s -w -X main.version=v0.2.0-dev" \
+  -ldflags "-s -w -X main.version=v0.1.1" \
   -o katago-remote-linux-amd64 ./cmd/katago-remote
 ```
 

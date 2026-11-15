@@ -19,7 +19,7 @@ No firewall rule, domain, TLS certificate, Python environment, or Cloudflare acc
 Use a Linux x86_64 server with an NVIDIA GPU. Choose a CUDA 12 image with cuDNN 9 when your provider offers one, then run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.1/install.sh | bash
 ```
 
 The command downloads several hundred megabytes. Every downloaded file is checked against a pinned SHA-256 digest before it is used.
@@ -38,7 +38,7 @@ In LizzieYzy Next, open **Remote Compute > Custom Compute**, paste the complete 
 
 You can also use the guided notebook. Colab GPU availability and session duration are controlled by Google and are not guaranteed.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ykrsama/katago-remote-one-click/blob/v0.1.0/colab/KataGo_Remote_One_Click.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ykrsama/katago-remote-one-click/blob/v0.1.1/colab/KataGo_Remote_One_Click.ipynb)
 
 ## What gets installed
 
@@ -47,7 +47,7 @@ You can also use the guided notebook. Colab GPU availability and session duratio
 | KataGo | 1.18.2 CUDA 12.1 | Official analysis engine |
 | Transformer 10B | official medium model | Strong default model with practical GPU usage |
 | cloudflared | 2026.8.3 | Encrypted WSS tunnel (temporary or fixed hostname) |
-| katago-remote | 0.1.0 | Authenticated analysis-protocol bridge and service manager |
+| katago-remote | 0.1.1 | Authenticated analysis-protocol bridge and service manager |
 
 Files are installed under `~/.local/share/katago-remote-one-click`. The bridge listens only on `127.0.0.1`; no inbound server port is opened. A random 256-bit token protects the WebSocket path, and only one client can use the engine at a time.
 
@@ -83,7 +83,7 @@ The installer can keep an existing KataGo executable, model, or analysis config 
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.0/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.1/install.sh
 
 KATAGO_REMOTE_KATAGO_PATH=/opt/katago/katago \
 KATAGO_REMOTE_MODEL_PATH=/opt/katago/model.bin.gz \
