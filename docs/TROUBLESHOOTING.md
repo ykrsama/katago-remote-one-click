@@ -61,7 +61,7 @@ A named tunnel keeps its hostname; only the private token rotates. `restart` kee
 3. Confirm that the server can make outbound HTTPS connections.
 4. Run `katago-remote restart` and try the new link.
 
-Only one client may be connected. Close the old client before connecting another one.
+Multiple clients can be connected at the same time, but they share the GPU. Close clients you are not using if analysis feels slower.
 
 ## LizzieYzy Next fails with maxVisits right after connecting
 
@@ -87,10 +87,13 @@ katago-remote restart
 Revoke it immediately:
 
 ```bash
-katago-remote reset-link
+katago-remote link list             # find the leaked link
+katago-remote link delete <id>      # delete it (disconnects within seconds)
+# or just disable it temporarily:
+katago-remote link set <id> --max-clients 0
 ```
 
-This stops the old session, creates a new random token, and prints a new link.
+`katago-remote reset-link` still works as a shortcut for rotating the first link and restarting.
 
 ## Uninstall
 

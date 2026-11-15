@@ -3,7 +3,6 @@ package bridge
 import (
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,30 +11,42 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/ykrsama/katago-remote-one-click/internal/links"
 )
+
+const linkReconcileInterval = 2 * time.Second
 
 type Server struct {
 	engine          *Engine
-	token           string
+	links           *links.Store
 	maxMessageBytes int64
 	logger          *log.Logger
 	httpServer      *http.Server
 
-	activeMu      sync.Mutex
-	activeSession string
+	sessionsMu sync.Mutex
+	sessions   map[string]*clientSession
 }
 
-func NewServer(engine *Engine, token string, maxMessageBytes int64, logger *log.Logger) (*Server, error) {
+type clientSession struct {
+	id         string
+	linkID     string
+	token      string
+	startedAt  time.Time
+	connection *websocket.Conn
+}
+
+func NewServer(engine *Engine, store *links.Store, maxMessageBytes int64, logger *log.Logger) (*Server, error) {
 	if engine == nil {
 		return nil, errors.New("engine is required")
 	}
-	if len(token) < 32 {
-		return nil, errors.New("access token must contain at least 32 characters")
+	if store == nil {
+		return nil, errors.New("link store is required")
 	}
 	if maxMessageBytes <= 0 {
 		maxMessageBytes = 4 << 20
@@ -45,9 +56,10 @@ func NewServer(engine *Engine, token string, maxMessageBytes int64, logger *log.
 	}
 	server := &Server{
 		engine:          engine,
-		token:           token,
+		links:           store,
 		maxMessageBytes: maxMessageBytes,
 		logger:          logger,
+		sessions:        make(map[string]*clientSession),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", server.health)
@@ -62,6 +74,9 @@ func NewServer(engine *Engine, token string, maxMessageBytes int64, logger *log.
 }
 
 func (s *Server) Serve(listener net.Listener) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.reconcileLoop(ctx)
 	s.logger.Printf("WebSocket bridge listening on %s", listener.Addr())
 	err := s.httpServer.Serve(listener)
 	if errors.Is(err, http.ErrServerClosed) {
@@ -71,6 +86,15 @@ func (s *Server) Serve(listener net.Listener) error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.sessionsMu.Lock()
+	sessions := make([]*clientSession, 0, len(s.sessions))
+	for _, session := range s.sessions {
+		sessions = append(sessions, session)
+	}
+	s.sessionsMu.Unlock()
+	for _, session := range sessions {
+		_ = session.connection.Close(websocket.StatusGoingAway, "server shutting down")
+	}
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -83,7 +107,18 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	provided := strings.TrimPrefix(r.URL.Path, "/katago/")
-	if provided == "" || strings.Contains(provided, "/") || !constantTimeEqual(provided, s.token) {
+	if provided == "" || strings.Contains(provided, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	registry, err := s.links.LoadOrCreate("")
+	if err != nil {
+		s.logger.Printf("load private links failed: %v", err)
+		http.Error(w, "private link registry unavailable", http.StatusInternalServerError)
+		return
+	}
+	link, ok := links.FindByToken(registry, provided)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
@@ -96,20 +131,28 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	connection.SetReadLimit(s.maxMessageBytes)
-	session := &websocketSender{
+	session := &clientSession{
 		id:         newSessionID(),
+		linkID:     link.ID,
+		token:      provided,
+		startedAt:  time.Now(),
 		connection: connection,
 	}
-	if !s.claimSession(session.id) {
-		_ = connection.Close(websocket.StatusTryAgainLater, "another client is already connected")
+	if !s.admit(session, link) {
+		s.logger.Printf("rejected client for link %s (max clients: %s)", link.ID, links.DescribeMax(link.MaxClients))
+		_ = connection.Close(websocket.StatusTryAgainLater, "link is disabled or at its client limit")
 		return
 	}
-	s.logger.Printf("client connected (session=%s)", session.id)
+	sender := &websocketSender{
+		id:         session.id,
+		connection: connection,
+	}
+	s.logger.Printf("client connected (session=%s, link=%s)", session.id, link.ID)
 	defer func() {
+		s.removeSession(session.id)
 		s.engine.CancelSession(session.id)
-		s.releaseSession(session.id)
 		_ = connection.Close(websocket.StatusNormalClosure, "session ended")
-		s.logger.Printf("client disconnected (session=%s)", session.id)
+		s.logger.Printf("client disconnected (session=%s, link=%s)", session.id, link.ID)
 	}()
 
 	for {
@@ -129,7 +172,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 			if line == "" {
 				continue
 			}
-			if err := s.engine.Submit(r.Context(), session, []byte(line)); err != nil {
+			if err := s.engine.Submit(r.Context(), sender, []byte(line)); err != nil {
 				s.logger.Printf("client request failed (session=%s): %v", session.id, err)
 				return
 			}
@@ -137,29 +180,91 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) claimSession(id string) bool {
-	s.activeMu.Lock()
-	defer s.activeMu.Unlock()
-	if s.activeSession != "" {
+func (s *Server) admit(session *clientSession, link links.Link) bool {
+	if link.MaxClients == links.Disabled {
 		return false
 	}
-	s.activeSession = id
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if link.MaxClients != links.Unlimited {
+		active := 0
+		for _, existing := range s.sessions {
+			if existing.linkID == link.ID {
+				active++
+			}
+		}
+		if active >= link.MaxClients {
+			return false
+		}
+	}
+	s.sessions[session.id] = session
 	return true
 }
 
-func (s *Server) releaseSession(id string) {
-	s.activeMu.Lock()
-	defer s.activeMu.Unlock()
-	if s.activeSession == id {
-		s.activeSession = ""
+func (s *Server) removeSession(id string) {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	delete(s.sessions, id)
+}
+
+func (s *Server) reconcileLoop(ctx context.Context) {
+	ticker := time.NewTicker(linkReconcileInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.reconcile()
+		}
 	}
 }
 
-func constantTimeEqual(left, right string) bool {
-	if len(left) != len(right) {
-		return false
+// reconcile applies link edits made on disk: deleted links, rotated tokens,
+// disabled links, and client-limit changes close the affected sessions.
+func (s *Server) reconcile() {
+	registry, err := s.links.LoadOrCreate("")
+	if err != nil {
+		s.logger.Printf("reload private links failed: %v", err)
+		return
 	}
-	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
+	byID := make(map[string]links.Link, len(registry))
+	for _, link := range registry {
+		byID[link.ID] = link
+	}
+
+	s.sessionsMu.Lock()
+	victims := make([]*clientSession, 0)
+	perLink := make(map[string][]*clientSession)
+	for _, session := range s.sessions {
+		link, exists := byID[session.linkID]
+		if !exists || link.Token != session.token || link.MaxClients == links.Disabled {
+			victims = append(victims, session)
+			continue
+		}
+		if link.MaxClients != links.Unlimited {
+			perLink[link.ID] = append(perLink[link.ID], session)
+		}
+	}
+	for linkID, sessions := range perLink {
+		limit := byID[linkID].MaxClients
+		if len(sessions) <= limit {
+			continue
+		}
+		sort.Slice(sessions, func(i, j int) bool {
+			return sessions[i].startedAt.Before(sessions[j].startedAt)
+		})
+		victims = append(victims, sessions[limit:]...)
+	}
+	for _, session := range victims {
+		delete(s.sessions, session.id)
+	}
+	s.sessionsMu.Unlock()
+
+	for _, session := range victims {
+		s.logger.Printf("closing session=%s (link=%s): link removed, rotated, disabled, or over its limit", session.id, session.linkID)
+		_ = session.connection.Close(websocket.StatusTryAgainLater, "link disabled, revoked, or over its client limit")
+	}
 }
 
 func newSessionID() string {

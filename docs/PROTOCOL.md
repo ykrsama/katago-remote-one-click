@@ -23,18 +23,22 @@ The bridge transports KataGo's Analysis Engine JSON protocol, not raw GTP. A nor
 - Results are mapped back to the originating ID before they reach the client.
 - Disconnecting a client sends termination requests for its active analyses.
 - Late results from a closed session are dropped.
-- Only one WebSocket client can own the engine at a time.
+- Any number of WebSocket clients may share the engine. Each connection gets its own session, ID space, and route table.
+- The bridge keeps no per-client query queue or cap: a client may have as many analyses in flight as it sends. KataGo's `numAnalysisThreads` setting bounds how many of them search in parallel; the rest are queued by KataGo.
+- `terminate_all` is scoped to the requesting session, so one client cannot cancel another client's analyses.
 
 This prevents a reconnecting client from receiving results that belong to the previous connection.
 
 ## Safety boundaries
 
 - The HTTP listener must resolve to `127.0.0.1` or `localhost`.
-- The WebSocket endpoint requires a random token in its path.
+- The WebSocket endpoint requires a random token in its path. Tokens live in `state/links.json` (mode `600`); each link records a client limit (`-1` unlimited, `0` disabled, `N`), and the bridge reloads the registry every two seconds to apply edits.
 - Token and runtime state files are created with user-only permissions.
 - Messages are size-limited, and `maxVisits` above the configured ceiling (default 10,000,000) is clamped rather than rejected. A `maxVisits` of `0` is treated as "no explicit limit" and omitted before the request reaches KataGo. LizzieYzy Next's live analysis asks for 10,000,000 visits.
 - The bridge launches KataGo directly without a shell and accepts no remote command-line input.
 - The full private URL is printed only on explicit `start`, `show`, or `reset-link` commands and is omitted from service logs.
+
+An optional Human SL model can be enabled with `-human-model`. The bridge forwards `overrideSettings` unchanged, so clients control `humanSLProfile`, `wideRootNoise`, and similar per-query settings.
 
 Cloudflare terminates public TLS for both tunnel modes. A Quick Tunnel is suitable for personal and temporary sessions, not an SLA-backed multi-user service. A named tunnel serves a fixed hostname from your own Cloudflare domain; its token is stored under `state/tunnel-token` with mode `600` and passed to cloudflared through `TUNNEL_TOKEN` so it never appears in process arguments. In both modes the private path token remains the only access control. Stop the service when it is not needed.
 

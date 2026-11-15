@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="v0.1.2"
+VERSION="v0.1.3"
 REPOSITORY="ykrsama/katago-remote-one-click"
 
 APP_URL="https://github.com/${REPOSITORY}/releases/download/${VERSION}/katago-remote-linux-amd64"
-APP_SHA256="570346a11fb453beac03bd3595bd4dce8a28126ab495eb36835e85116805401a"
+APP_SHA256="e98fb151d5ecce6d4314fd05aab34228ebf46ac7f9d5d57f42e5151ad30bfd91"
 
 CLOUDFLARED_VERSION="2026.8.3"
 CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
@@ -21,6 +21,10 @@ MODEL_NAME="b10c512h8nbt3tflrs-fson-silu-rsnh.bin.gz"
 MODEL_URL="https://github.com/lightvector/KataGo/releases/download/v1.17.0/${MODEL_NAME}"
 MODEL_SHA256="c04db4a503721d948bb720324f3cbdac6088cc9eb243632f020e4b6846f58995"
 
+HUMAN_MODEL_NAME="b18c384nbt-humanv0.bin.gz"
+HUMAN_MODEL_URL="https://github.com/lightvector/KataGo/releases/download/v1.15.0/${HUMAN_MODEL_NAME}"
+HUMAN_MODEL_SHA256="637746e44f0efe00ad1245a50aa9bbf0716efe364c43965ead97bd6835d84ab5"
+
 ANALYSIS_CONFIG_URL="https://raw.githubusercontent.com/${REPOSITORY}/${VERSION}/config/analysis.cfg"
 ANALYSIS_CONFIG_SHA256="15c1223ae21391f3cdb52c13fbda8c1a7f76297cf9f58b22f13b28fe7c999be9"
 
@@ -34,7 +38,7 @@ usage() {
 KataGo Remote One-Click / KataGo 远程算力一键部署
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.2/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.3/install.sh | bash
   bash install.sh [--no-start] [--dry-run]
 
 Options:
@@ -47,6 +51,9 @@ Optional environment variables:
   KATAGO_REMOTE_KATAGO_PATH Use an existing KataGo executable.
   KATAGO_REMOTE_MODEL_PATH  Use an existing neural network model.
   KATAGO_REMOTE_CONFIG_PATH Use an existing analysis config.
+  KATAGO_REMOTE_HUMAN_MODEL         Set to 1 to download the KataGo Human SL model
+                                    (about 95 MB) and enable humanSLProfile queries.
+  KATAGO_REMOTE_HUMAN_MODEL_PATH    Use an existing Human SL model file.
   KATAGO_REMOTE_TUNNEL_MODE       Tunnel mode: quick (default) or named.
   KATAGO_REMOTE_TUNNEL_HOSTNAME   Fixed hostname for a named tunnel, for example
                                   katago.ykrsama.org.
@@ -174,11 +181,16 @@ if [[ "${DRY_RUN}" == "1" ]]; then
   if [[ "${TUNNEL_MODE}" == "named" ]]; then
     TUNNEL_SUMMARY="named, fixed hostname https://${TUNNEL_HOSTNAME}"
   fi
+  HUMAN_MODEL_SUMMARY="disabled"
+  if [[ -n "${KATAGO_REMOTE_HUMAN_MODEL_PATH:-}" || "${KATAGO_REMOTE_HUMAN_MODEL:-0}" == "1" ]]; then
+    HUMAN_MODEL_SUMMARY="enabled"
+  fi
   cat <<EOF
 KataGo Remote One-Click ${VERSION}
 Target: ${INSTALL_HOME}
 Platform: Linux x86_64 with an NVIDIA GPU
 Tunnel: ${TUNNEL_SUMMARY}
+Human SL model: ${HUMAN_MODEL_SUMMARY}
 Downloads: service binary, cloudflared ${CLOUDFLARED_VERSION}, KataGo ${KATAGO_VERSION}, ${MODEL_NAME}
 Security: localhost-only listener, random private token, encrypted WSS tunnel
 EOF
@@ -251,6 +263,16 @@ else
   download "${ANALYSIS_CONFIG_URL}" "${CONFIG_PATH}" "${ANALYSIS_CONFIG_SHA256}"
 fi
 
+HUMAN_MODEL_PATH=""
+if [[ -n "${KATAGO_REMOTE_HUMAN_MODEL_PATH:-}" ]]; then
+  HUMAN_MODEL_PATH="$(absolute_path "${KATAGO_REMOTE_HUMAN_MODEL_PATH}")"
+  [[ -f "${HUMAN_MODEL_PATH}" ]] || fail "Existing Human SL model was not found: ${HUMAN_MODEL_PATH}"
+  printf 'Using existing Human SL model: %s\n' "${HUMAN_MODEL_PATH}"
+elif [[ "${KATAGO_REMOTE_HUMAN_MODEL:-0}" == "1" ]]; then
+  HUMAN_MODEL_PATH="${INSTALL_HOME}/models/${HUMAN_MODEL_NAME}"
+  download "${HUMAN_MODEL_URL}" "${HUMAN_MODEL_PATH}" "${HUMAN_MODEL_SHA256}"
+fi
+
 say "4/5 Saving the private configuration / 保存私密配置"
 "${APP_PATH}" stop --home "${INSTALL_HOME}" >/dev/null 2>&1 || true
 INIT_ARGS=(
@@ -260,6 +282,9 @@ INIT_ARGS=(
   --config "${CONFIG_PATH}"
   --cloudflared "${CLOUDFLARED_PATH}"
 )
+if [[ -n "${HUMAN_MODEL_PATH}" ]]; then
+  INIT_ARGS+=(--human-model "${HUMAN_MODEL_PATH}")
+fi
 if [[ "${TUNNEL_MODE}" == "named" ]]; then
   INIT_ARGS+=(--tunnel-mode named --tunnel-hostname "${TUNNEL_HOSTNAME}")
   if [[ -n "${TUNNEL_TOKEN_FILE}" ]]; then

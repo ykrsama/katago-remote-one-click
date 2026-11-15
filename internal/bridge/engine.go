@@ -22,6 +22,7 @@ const maxScannerBytes = 64 << 20
 type EngineConfig struct {
 	Executable      string
 	Model           string
+	HumanModel      string
 	Config          string
 	WorkingDir      string
 	Environment     []string
@@ -78,15 +79,7 @@ func Start(ctx context.Context, cfg EngineConfig, logger *log.Logger) (*Engine, 
 	}
 
 	engineCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(
-		engineCtx,
-		cfg.Executable,
-		"analysis",
-		"-model",
-		cfg.Model,
-		"-config",
-		cfg.Config,
-	)
+	cmd := exec.CommandContext(engineCtx, cfg.Executable, kataGoArgs(cfg)...)
 	cmd.Dir = cfg.WorkingDir
 	cmd.Env = append(os.Environ(), cfg.Environment...)
 	configureProcessGroup(cmd)
@@ -141,6 +134,14 @@ func Start(ctx context.Context, cfg EngineConfig, logger *log.Logger) (*Engine, 
 	return engine, nil
 }
 
+func kataGoArgs(cfg EngineConfig) []string {
+	args := []string{"analysis", "-model", cfg.Model, "-config", cfg.Config}
+	if cfg.HumanModel != "" {
+		args = append(args, "-human-model", cfg.HumanModel)
+	}
+	return args
+}
+
 func (e *Engine) probe(ctx context.Context) (map[string]any, error) {
 	id := fmt.Sprintf("__remote_probe_%d", e.seq.Add(1))
 	result := make(chan map[string]any, 1)
@@ -184,12 +185,46 @@ func (e *Engine) Submit(ctx context.Context, sender Sender, payload []byte) erro
 		userRoutes = make(map[string]string)
 		e.byUser[sessionID] = userRoutes
 	}
-	if _, exists := userRoutes[originalID]; exists {
+	action, _ := query["action"].(string)
+	if action == "terminate_all" {
+		// Scope terminate_all to this session so one client cannot stop another
+		// client's analyses on the shared engine.
+		actualIDs := make([]string, 0, len(userRoutes))
+		for _, actualID := range userRoutes {
+			if r := e.routes[actualID]; r != nil && r.action == "" {
+				actualIDs = append(actualIDs, actualID)
+			}
+			delete(e.routes, actualID)
+		}
+		delete(e.byUser, sessionID)
 		e.routeMu.Unlock()
-		return e.sendProtocolError(ctx, sender, originalID, errors.New("query id is already active"))
+		for _, actualID := range actualIDs {
+			if err := e.writeJSON(map[string]any{
+				"id":          fmt.Sprintf("remote_%s_%d", sessionID, e.seq.Add(1)),
+				"action":      "terminate",
+				"terminateId": actualID,
+			}); err != nil {
+				return fmt.Errorf("terminate session queries: %w", err)
+			}
+		}
+		ack, err := json.Marshal(query)
+		if err != nil {
+			return fmt.Errorf("encode terminate_all response: %w", err)
+		}
+		return sender.Send(ctx, ack)
 	}
 
-	action, _ := query["action"].(string)
+	// A client may reuse an active query ID (some GUIs cancel and re-send with
+	// the same ID). Terminate the previous KataGo query and replace the route
+	// instead of failing the request.
+	replaced := ""
+	if existing, exists := userRoutes[originalID]; exists {
+		if previous := e.routes[existing]; previous != nil && previous.action == "" {
+			replaced = existing
+		}
+		delete(e.routes, existing)
+		delete(userRoutes, originalID)
+	}
 	actualID := fmt.Sprintf("remote_%s_%d", sessionID, e.seq.Add(1))
 	r := &route{
 		sender:          sender,
@@ -216,6 +251,15 @@ func (e *Engine) Submit(ctx context.Context, sender Sender, payload []byte) erro
 	userRoutes[originalID] = actualID
 	e.routeMu.Unlock()
 
+	if replaced != "" {
+		if err := e.writeJSON(map[string]any{
+			"id":          fmt.Sprintf("remote_%s_%d", sessionID, e.seq.Add(1)),
+			"action":      "terminate",
+			"terminateId": replaced,
+		}); err != nil {
+			return fmt.Errorf("terminate replaced query: %w", err)
+		}
+	}
 	if err := e.writeJSON(query); err != nil {
 		e.removeRoute(actualID, r)
 		return fmt.Errorf("send query to KataGo: %w", err)

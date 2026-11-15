@@ -61,7 +61,7 @@ katago-remote show
 3. 确认服务器可以访问外网 HTTPS。
 4. 运行 `katago-remote restart`，使用新链接重试。
 
-同一时间只允许一个客户端连接。请先关闭旧客户端，再连接另一台电脑。
+多个客户端可以同时连接，但共享同一块 GPU；如果感觉分析变慢，先关掉暂时不用的客户端。
 
 ## LizzieYzy Next 连上后立刻报 maxVisits
 
@@ -87,10 +87,13 @@ katago-remote restart
 立即运行：
 
 ```bash
-katago-remote reset-link
+katago-remote link list             # 找到泄露的那条链接
+katago-remote link delete <id>      # 删除它（秒级断开）
+# 或者只临时禁用：
+katago-remote link set <id> --max-clients 0
 ```
 
-旧会话会停止，旧令牌立即失效，并生成新的私密链接。
+`katago-remote reset-link` 仍然可用，它会轮换第一条链接的令牌并重启服务。
 
 ## 卸载
 

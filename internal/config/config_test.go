@@ -137,3 +137,21 @@ func TestTunnelTokenIsPrivateAndValidated(t *testing.T) {
 		}
 	}
 }
+
+func TestHumanModelPathMustBeAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Default()
+	cfg.KataGoPath = filepath.Join(dir, "katago")
+	cfg.ModelPath = filepath.Join(dir, "model.bin.gz")
+	cfg.AnalysisConfig = filepath.Join(dir, "analysis.cfg")
+	cfg.CloudflaredPath = filepath.Join(dir, "cloudflared")
+
+	cfg.HumanModelPath = "relative-model.bin.gz"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("relative humanModelPath was accepted")
+	}
+	cfg.HumanModelPath = filepath.Join(dir, "human.bin.gz")
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("absolute humanModelPath rejected: %v", err)
+	}
+}

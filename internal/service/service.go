@@ -20,11 +20,13 @@ import (
 
 	"github.com/ykrsama/katago-remote-one-click/internal/bridge"
 	appconfig "github.com/ykrsama/katago-remote-one-click/internal/config"
+	"github.com/ykrsama/katago-remote-one-click/internal/links"
 )
 
 type InitOptions struct {
 	KataGo         string
 	Model          string
+	HumanModel     string
 	Config         string
 	Cloudflared    string
 	Listen         string
@@ -80,6 +82,17 @@ func Initialize(home string, options InitOptions) error {
 			return fmt.Errorf("%s path is required", item.name)
 		}
 	}
+	if options.HumanModel != "" {
+		absolute, err := filepath.Abs(options.HumanModel)
+		if err != nil {
+			return fmt.Errorf("resolve human model path: %w", err)
+		}
+		info, err := os.Stat(absolute)
+		if err != nil || info.IsDir() {
+			return fmt.Errorf("human model was not found at %s", absolute)
+		}
+		cfg.HumanModelPath = absolute
+	}
 	if options.Listen != "" {
 		cfg.Listen = options.Listen
 	}
@@ -130,7 +143,10 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 	if err != nil {
 		return err
 	}
-	token, err := appconfig.ReadToken(home)
+	// The access token is only a migration source for the link registry now.
+	legacyToken, _ := appconfig.ReadToken(home)
+	store := links.NewStore(home)
+	registry, err := store.LoadOrCreate(legacyToken)
 	if err != nil {
 		return err
 	}
@@ -150,6 +166,7 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 	engine, err := bridge.Start(ctx, bridge.EngineConfig{
 		Executable:      cfg.KataGoPath,
 		Model:           cfg.ModelPath,
+		HumanModel:      cfg.HumanModelPath,
 		Config:          cfg.AnalysisConfig,
 		WorkingDir:      home,
 		Environment:     cfg.ExtraEnvironment,
@@ -166,7 +183,7 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 		_ = engine.Shutdown(context.Background())
 		return fmt.Errorf("listen on %s: %w", cfg.Listen, err)
 	}
-	server, err := bridge.NewServer(engine, token, cfg.MaxMessageBytes, logger)
+	server, err := bridge.NewServer(engine, store, cfg.MaxMessageBytes, logger)
 	if err != nil {
 		_ = listener.Close()
 		_ = engine.Shutdown(context.Background())
@@ -190,10 +207,13 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 		shutdown(ctx, server, engine, nil)
 		return err
 	}
-	connectionURL, err := buildConnectionURL(baseURL, token)
-	if err != nil {
-		shutdown(ctx, server, engine, tunnelProcess)
-		return err
+	connectionURL := ""
+	if len(registry) > 0 {
+		connectionURL, err = buildConnectionURL(baseURL, registry[0].Token)
+		if err != nil {
+			shutdown(ctx, server, engine, tunnelProcess)
+			return err
+		}
 	}
 	state := ConnectionState{
 		URL:       connectionURL,
@@ -205,8 +225,10 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 		shutdown(ctx, server, engine, tunnelProcess)
 		return fmt.Errorf("save connection link: %w", err)
 	}
-	if _, err := WriteQR(home, connectionURL); err != nil {
-		logger.Printf("QR image could not be written: %v", err)
+	if connectionURL != "" {
+		if _, err := WriteQR(home, connectionURL); err != nil {
+			logger.Printf("QR image could not be written: %v", err)
+		}
 	}
 	logger.Printf("secure tunnel ready at %s (access token omitted)", baseURL)
 	if cfg.NamedTunnel() {
@@ -275,7 +297,7 @@ func StartDaemon(home, version string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if _, err := appconfig.ReadToken(home); err != nil {
+	if _, err := linkStore(home); err != nil {
 		return err
 	}
 	if cfg.NamedTunnel() {
@@ -382,7 +404,7 @@ func ReadStatus(home string) (Status, error) {
 	data, err := os.ReadFile(connectionStatePath(home))
 	if err == nil {
 		var connection ConnectionState
-		if json.Unmarshal(data, &connection) == nil && strings.HasPrefix(connection.URL, "wss://") {
+		if json.Unmarshal(data, &connection) == nil && connection.BaseURL != "" {
 			status.Connection = &connection
 		}
 	}
@@ -400,15 +422,35 @@ func Show(home string, output io.Writer) error {
 	if status.Connection == nil {
 		return errors.New("service is still starting; try again shortly")
 	}
+	store, err := linkStore(home)
+	if err != nil {
+		return err
+	}
+	registry, err := store.Load()
+	if err != nil {
+		return err
+	}
 	_, _ = fmt.Fprintln(output, "")
 	_, _ = fmt.Fprintln(output, "Ready / 远程算力已就绪")
-	_, _ = fmt.Fprintln(output, "")
-	_, _ = fmt.Fprintln(output, status.Connection.URL)
-	_, _ = fmt.Fprintln(output, "")
-	_ = PrintQR(output, status.Connection.URL)
-	_, _ = fmt.Fprintf(output, "\nQR image / 二维码图片: %s\n", filepath.Join(home, "state", "connection-qr.png"))
-	_, _ = fmt.Fprintln(output, "Keep this link private. Paste it into LizzieYzy Next > Remote Compute > Custom Compute.")
-	_, _ = fmt.Fprintln(output, "请勿公开此链接。将它粘贴到 LizzieYzy Next > 远程算力 > 自建算力。")
+	if len(registry) == 0 {
+		_, _ = fmt.Fprintln(output, "")
+		_, _ = fmt.Fprintln(output, "No private links are configured. Run `katago-remote link create`.")
+		_, _ = fmt.Fprintln(output, "尚未创建私密链接。运行 `katago-remote link create`。")
+		return nil
+	}
+	for index, link := range registry {
+		value, err := buildConnectionURL(status.Connection.BaseURL, link.Token)
+		if err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(output, "\n[%s] max clients: %s\n%s\n", link.ID, links.DescribeMax(link.MaxClients), value)
+		if index == 0 {
+			_ = PrintQR(output, value)
+			_, _ = fmt.Fprintf(output, "\nQR image / 二维码图片: %s\n", filepath.Join(home, "state", "connection-qr.png"))
+		}
+	}
+	_, _ = fmt.Fprintln(output, "Keep these links private. Paste one into LizzieYzy Next > Remote Compute > Custom Compute.")
+	_, _ = fmt.Fprintln(output, "请勿公开这些链接。将其中一个粘贴到 LizzieYzy Next > 远程算力 > 自建算力。")
 	return nil
 }
 
@@ -416,10 +458,127 @@ func ResetLink(home, version string, output io.Writer) error {
 	if err := Stop(home, io.Discard); err != nil {
 		return err
 	}
-	if _, err := appconfig.EnsureToken(home, true); err != nil {
+	store, err := linkStore(home)
+	if err != nil {
+		return err
+	}
+	rotated, err := store.RotateToken("")
+	if err != nil {
+		return err
+	}
+	if err := appconfig.SaveToken(home, rotated.Token); err != nil {
 		return err
 	}
 	return StartDaemon(home, version, output)
+}
+
+func linkStore(home string) (*links.Store, error) {
+	store := links.NewStore(home)
+	legacy := ""
+	if token, err := appconfig.ReadToken(home); err == nil {
+		legacy = token
+	}
+	if _, err := store.LoadOrCreate(legacy); err != nil {
+		return nil, err
+	}
+	return store, nil
+}
+
+func connectionBaseURL(home string) string {
+	data, err := os.ReadFile(connectionStatePath(home))
+	if err != nil {
+		return ""
+	}
+	var state ConnectionState
+	if json.Unmarshal(data, &state) != nil {
+		return ""
+	}
+	return state.BaseURL
+}
+
+func linkURL(home string, link links.Link) (string, bool) {
+	base := connectionBaseURL(home)
+	if base == "" {
+		return "", false
+	}
+	value, err := buildConnectionURL(base, link.Token)
+	if err != nil {
+		return "", false
+	}
+	return value, true
+}
+
+func printLink(home string, link links.Link, output io.Writer) {
+	if value, ok := linkURL(home, link); ok {
+		_, _ = fmt.Fprintln(output, value)
+		return
+	}
+	_, _ = fmt.Fprintf(output, "token: %s\n", link.Token)
+	_, _ = fmt.Fprintln(output, "(start the service to get the full wss URL)")
+}
+
+func CreateLink(home string, maxClients int, output io.Writer) error {
+	store, err := linkStore(home)
+	if err != nil {
+		return err
+	}
+	created, err := store.Create(maxClients)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(output, "Created link %s (max clients: %s)\n", created.ID, links.DescribeMax(created.MaxClients))
+	printLink(home, created, output)
+	return nil
+}
+
+func ListLinks(home string, output io.Writer) error {
+	store, err := linkStore(home)
+	if err != nil {
+		return err
+	}
+	registry, err := store.Load()
+	if err != nil {
+		return err
+	}
+	if len(registry) == 0 {
+		_, _ = fmt.Fprintln(output, "No private links are configured. Run `katago-remote link create`.")
+		return nil
+	}
+	_, _ = fmt.Fprintf(output, "%-10s %-14s %s\n", "ID", "MAX CLIENTS", "URL")
+	for _, link := range registry {
+		value, ok := linkURL(home, link)
+		if !ok {
+			value = "token: " + link.Token
+		}
+		_, _ = fmt.Fprintf(output, "%-10s %-14s %s\n", link.ID, links.DescribeMax(link.MaxClients), value)
+	}
+	return nil
+}
+
+func SetLinkMaxClients(home, ref string, maxClients int, output io.Writer) error {
+	store, err := linkStore(home)
+	if err != nil {
+		return err
+	}
+	updated, err := store.SetMaxClients(ref, maxClients)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(output, "Link %s: max clients = %s\n", updated.ID, links.DescribeMax(updated.MaxClients))
+	return nil
+}
+
+func DeleteLink(home, ref string, output io.Writer) error {
+	store, err := linkStore(home)
+	if err != nil {
+		return err
+	}
+	deleted, err := store.Delete(ref)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(output, "Deleted link %s. Active sessions on it are disconnected within a few seconds.\n", deleted.ID)
+	return nil
 }
 
 func Doctor(ctx context.Context, home string) []Check {
@@ -432,6 +591,15 @@ func Doctor(ctx context.Context, home string) []Check {
 		return append(checks, Check{Name: "Configuration", OK: false, Message: err.Error()})
 	}
 	checks = append(checks, Check{Name: "Configuration", OK: true, Message: filepath.Join(home, appconfig.ConfigFileName)})
+	if store, storeErr := linkStore(home); storeErr == nil {
+		if registry, loadErr := store.Load(); loadErr == nil {
+			checks = append(checks, Check{
+				Name:    "Private links",
+				OK:      len(registry) > 0,
+				Message: fmt.Sprintf("%d configured", len(registry)),
+			})
+		}
+	}
 	if cfg.NamedTunnel() {
 		checks = append(checks,
 			Check{Name: "Tunnel hostname", OK: true, Message: "https://" + cfg.TunnelHostname},
@@ -461,6 +629,10 @@ func Doctor(ctx context.Context, home string) []Check {
 	} {
 		info, statErr := os.Stat(path)
 		checks = append(checks, Check{Name: name, OK: statErr == nil && !infoIsDirectory(info), Message: path})
+	}
+	if cfg.HumanModelPath != "" {
+		info, statErr := os.Stat(cfg.HumanModelPath)
+		checks = append(checks, Check{Name: "Human model", OK: statErr == nil && !infoIsDirectory(info), Message: cfg.HumanModelPath})
 	}
 	checks = append(checks, commandCheck(ctx, "NVIDIA driver", "nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"))
 	checks = append(checks, commandCheckWithEnv(ctx, "KataGo startup", cfg.ExtraEnvironment, cfg.KataGoPath, "version"))

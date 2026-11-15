@@ -31,6 +31,7 @@ type Config struct {
 	Listen            string        `json:"listen"`
 	KataGoPath        string        `json:"katagoPath"`
 	ModelPath         string        `json:"modelPath"`
+	HumanModelPath    string        `json:"humanModelPath,omitempty"`
 	AnalysisConfig    string        `json:"analysisConfig"`
 	CloudflaredPath   string        `json:"cloudflaredPath"`
 	TunnelMode        string        `json:"tunnelMode,omitempty"`
@@ -114,6 +115,9 @@ func (cfg Config) Validate() error {
 		if !filepath.IsAbs(value) {
 			return fmt.Errorf("%s must be an absolute path", name)
 		}
+	}
+	if cfg.HumanModelPath != "" && !filepath.IsAbs(cfg.HumanModelPath) {
+		return errors.New("humanModelPath must be an absolute path")
 	}
 	if cfg.MaxMessageBytes < 1024 || cfg.MaxMessageBytes > 64<<20 {
 		return errors.New("maxMessageBytes must be between 1 KiB and 64 MiB")
@@ -274,6 +278,17 @@ func EnsureToken(home string, rotate bool) (string, error) {
 		return "", err
 	}
 	return token, nil
+}
+
+// SaveToken keeps the legacy access-token file in sync with the first link.
+func SaveToken(home, token string) error {
+	if len(token) < 32 {
+		return errors.New("access token is too short")
+	}
+	if err := EnsurePrivateDirs(home); err != nil {
+		return err
+	}
+	return atomicWrite(filepath.Join(home, TokenFileName), []byte(token+"\n"), 0o600)
 }
 
 func ReadToken(home string) (string, error) {

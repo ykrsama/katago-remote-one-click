@@ -126,6 +126,102 @@ func TestEngineRejectsUnsafeRequestsAsProtocolErrors(t *testing.T) {
 	}
 }
 
+func TestDuplicateQueryIDReplacesPreviousQuery(t *testing.T) {
+	engine := startFakeEngine(t)
+	sender := &channelSender{id: "replace", messages: make(chan []byte, 8)}
+	ctx := context.Background()
+	if err := engine.Submit(ctx, sender, []byte(`{"id":"same","testDelayMs":500}`)); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	if err := engine.Submit(ctx, sender, []byte(`{"id":"same","testDelayMs":50}`)); err != nil {
+		t.Fatal(err)
+	}
+	response := receiveJSON(t, sender.messages)
+	if response["id"] != "same" {
+		t.Fatalf("replacement response id = %v", response["id"])
+	}
+	if elapsed := time.Since(started); elapsed > 400*time.Millisecond {
+		t.Fatalf("replacement query waited for the previous one: %v", elapsed)
+	}
+	select {
+	case unexpected := <-sender.messages:
+		t.Fatalf("replaced query still delivered a result: %s", unexpected)
+	case <-time.After(600 * time.Millisecond):
+	}
+}
+
+func TestKataGoArgsIncludeHumanModel(t *testing.T) {
+	plain := strings.Join(kataGoArgs(EngineConfig{Model: "/m.bin.gz", Config: "/a.cfg"}), " ")
+	if plain != "analysis -model /m.bin.gz -config /a.cfg" {
+		t.Fatalf("args = %q", plain)
+	}
+	withHuman := strings.Join(kataGoArgs(EngineConfig{
+		Model:      "/m.bin.gz",
+		Config:     "/a.cfg",
+		HumanModel: "/human.bin.gz",
+	}), " ")
+	if withHuman != "analysis -model /m.bin.gz -config /a.cfg -human-model /human.bin.gz" {
+		t.Fatalf("args = %q", withHuman)
+	}
+}
+
+func TestSessionKeepsMultipleQueriesInFlight(t *testing.T) {
+	engine := startFakeEngine(t)
+	sender := &channelSender{id: "parallel", messages: make(chan []byte, 8)}
+	started := time.Now()
+	for _, id := range []string{"parallel-1", "parallel-2", "parallel-3"} {
+		payload := []byte(fmt.Sprintf(`{"id":%q,"testDelayMs":500}`, id))
+		if err := engine.Submit(context.Background(), sender, payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := make(map[string]bool)
+	for i := 0; i < 3; i++ {
+		response := receiveJSON(t, sender.messages)
+		seen[response["id"].(string)] = true
+	}
+	for _, id := range []string{"parallel-1", "parallel-2", "parallel-3"} {
+		if !seen[id] {
+			t.Fatalf("missing response for %s", id)
+		}
+	}
+	// Serialized execution would take ~1500ms; concurrent execution ~500ms.
+	if elapsed := time.Since(started); elapsed > 1200*time.Millisecond {
+		t.Fatalf("queries were serialized instead of running concurrently: %v", elapsed)
+	}
+}
+
+func TestTerminateAllOnlyStopsItsOwnSession(t *testing.T) {
+	engine := startFakeEngine(t)
+	first := &channelSender{id: "first", messages: make(chan []byte, 8)}
+	second := &channelSender{id: "second", messages: make(chan []byte, 8)}
+	ctx := context.Background()
+	if err := engine.Submit(ctx, first, []byte(`{"id":"first-query","testDelayMs":300}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Submit(ctx, second, []byte(`{"id":"second-query","testDelayMs":300}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Submit(ctx, first, []byte(`{"id":"stop-everything","action":"terminate_all"}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	ack := receiveJSON(t, first.messages)
+	if ack["id"] != "stop-everything" || ack["action"] != "terminate_all" {
+		t.Fatalf("unexpected terminate_all response: %#v", ack)
+	}
+	response := receiveJSON(t, second.messages)
+	if response["id"] != "second-query" {
+		t.Fatalf("second session response = %#v", response)
+	}
+	select {
+	case unexpected := <-first.messages:
+		t.Fatalf("terminated session still received a result: %s", unexpected)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
 func TestValidateQueryClampsMaxVisits(t *testing.T) {
 	engine := &Engine{cfg: EngineConfig{MaxVisits: 1_000_000}}
 
