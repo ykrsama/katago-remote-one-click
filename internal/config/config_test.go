@@ -155,3 +155,32 @@ func TestHumanModelPathMustBeAbsolute(t *testing.T) {
 		t.Fatalf("absolute humanModelPath rejected: %v", err)
 	}
 }
+
+func TestNormalizeTunnelProtocol(t *testing.T) {
+	for input, want := range map[string]string{
+		"":      TunnelProtocolHTTP2,
+		"http2": TunnelProtocolHTTP2,
+		"HTTP2": TunnelProtocolHTTP2,
+		"quic":  TunnelProtocolQUIC,
+		"auto":  TunnelProtocolAuto,
+	} {
+		got, err := NormalizeTunnelProtocol(input)
+		if err != nil {
+			t.Fatalf("%q rejected: %v", input, err)
+		}
+		if got != want {
+			t.Fatalf("%q = %q, want %q", input, got, want)
+		}
+	}
+	for _, invalid := range []string{"udp", "tcp", "http"} {
+		if _, err := NormalizeTunnelProtocol(invalid); err == nil {
+			t.Fatalf("invalid protocol %q accepted", invalid)
+		}
+	}
+}
+
+func TestDefaultTunnelProtocolIsHTTP2(t *testing.T) {
+	if got := Default().TunnelProtocol; got != TunnelProtocolHTTP2 {
+		t.Fatalf("default tunnel protocol = %q", got)
+	}
+}

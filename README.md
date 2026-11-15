@@ -19,7 +19,7 @@ No firewall rule, domain, TLS certificate, Python environment, or Cloudflare acc
 Use a Linux x86_64 server with an NVIDIA GPU. Choose a CUDA 12 image with cuDNN 9 when your provider offers one, then run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.4/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.5/install.sh | bash
 ```
 
 The command downloads several hundred megabytes. Every downloaded file is checked against a pinned SHA-256 digest before it is used.
@@ -38,7 +38,7 @@ In LizzieYzy Next, open **Remote Compute > Custom Compute**, paste the complete 
 
 You can also use the guided notebook. Colab GPU availability and session duration are controlled by Google and are not guaranteed.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ykrsama/katago-remote-one-click/blob/v0.1.4/colab/KataGo_Remote_One_Click.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ykrsama/katago-remote-one-click/blob/v0.1.5/colab/KataGo_Remote_One_Click.ipynb)
 
 ## What gets installed
 
@@ -47,7 +47,7 @@ You can also use the guided notebook. Colab GPU availability and session duratio
 | KataGo | 1.18.2 CUDA 12.1 | Official analysis engine |
 | Transformer 10B | official medium model | Strong default model with practical GPU usage |
 | cloudflared | 2026.8.3 | Encrypted WSS tunnel (temporary or fixed hostname) |
-| katago-remote | 0.1.4 | Authenticated analysis-protocol bridge and service manager |
+| katago-remote | 0.1.5 | Authenticated analysis-protocol bridge and service manager |
 
 Files are installed under `~/.local/share/katago-remote-one-click`. The bridge listens only on `127.0.0.1`; no inbound server port is opened. A random 256-bit token protects the WebSocket path. Multiple clients may connect at the same time, and each client may keep several analysis queries in flight; they all share the GPU, so concurrent analyses divide the available speed.
 
@@ -72,6 +72,16 @@ If `katago-remote` is not found in a new terminal, run it as:
 ```
 
 The `trycloudflare.com` hostname is temporary and usually changes after a restart or server reboot. Run `katago-remote show`, then update the link in LizzieYzy Next.
+
+## Tunnel transport
+
+Named tunnels default to **http2 (TCP 443)**, which is more reliable on networks that throttle UDP; the performance difference is negligible for analysis traffic. To change it:
+
+```bash
+katago-remote init --tunnel-protocol quic   # UDP 7844
+katago-remote init --tunnel-protocol auto   # let cloudflared choose
+katago-remote restart
+```
 
 ## Private link management
 
@@ -103,7 +113,7 @@ The installer can keep an existing KataGo executable, model, or analysis config 
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.4/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.5/install.sh
 
 KATAGO_REMOTE_KATAGO_PATH=/opt/katago/katago \
 KATAGO_REMOTE_MODEL_PATH=/opt/katago/model.bin.gz \

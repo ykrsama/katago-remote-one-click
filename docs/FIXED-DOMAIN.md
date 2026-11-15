@@ -35,6 +35,8 @@ Key points:
    - **Service**: `http://127.0.0.1:8765`
 4. Save. Cloudflare creates the CNAME for `katago.ykrsama.org` automatically; do not add the DNS record by hand.
 
+The tunnel uses http2 (TCP 443) by default. If UDP works well on the server, switch with `katago-remote init --tunnel-protocol quic`, or use `auto` to let cloudflared choose.
+
 **The Service value must match the service's listen address** (default `127.0.0.1:8765`). Using `https://`, a public IP, or a different port makes the hostname return 1033 or 502.
 
 ## Step 2: Production server
@@ -44,14 +46,14 @@ Key points:
 Check the binary first:
 
 ```bash
-~/.local/bin/katago-remote version   # v0.1.4 or newer is required
+~/.local/bin/katago-remote version   # v0.1.5 or newer is required
 ```
 
 The easiest upgrade is to rerun the installer with the tunnel variables. It only re-downloads the binary, because its hash changed, and reuses KataGo, the model, and the config:
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.4/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.5/install.sh
 
 KATAGO_REMOTE_TUNNEL_HOSTNAME=katago.ykrsama.org \
 KATAGO_REMOTE_TUNNEL_TOKEN='eyJ...' \
@@ -78,11 +80,11 @@ The token is copied to `~/.local/share/katago-remote-one-click/state/tunnel-toke
 
 ### 2b. New installation
 
-With v0.1.4 or newer, pass the variables to **Bash**, not to `curl`:
+With v0.1.5 or newer, pass the variables to **Bash**, not to `curl`:
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.4/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.5/install.sh
 
 KATAGO_REMOTE_TUNNEL_HOSTNAME=katago.ykrsama.org \
 KATAGO_REMOTE_TUNNEL_TOKEN='eyJ...' \
@@ -100,7 +102,7 @@ git clone https://github.com/ykrsama/katago-remote-one-click
 cd katago-remote-one-click
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -trimpath -buildvcs=false \
-  -ldflags "-s -w -X main.version=v0.1.4" \
+  -ldflags "-s -w -X main.version=v0.1.5" \
   -o katago-remote-linux-amd64 ./cmd/katago-remote
 ```
 

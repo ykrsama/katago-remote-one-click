@@ -88,7 +88,21 @@ Symptom: `自建算力已连接` appears, `kata-analyze` produces only an `Unexp
 
 Cause: v0.1.2 and older treated any KataGo warning as the end of the analysis and removed the query route, so every later result was dropped. LizzieYzy Next sends `playoutDoublingAdvantage` at the top level, KataGo warns about the unknown field, and that warning triggered the bug.
 
-Fix: upgrade to v0.1.4 or newer. It keeps the query alive after warnings and moves the top-level `playoutDoublingAdvantage` into `overrideSettings`, which also removes the warning.
+Fix: upgrade to v0.1.5 or newer. It keeps the query alive after warnings and moves the top-level `playoutDoublingAdvantage` into `overrideSettings`, which also removes the warning.
+
+## Tunnel connector keeps reconnecting (connIndex)
+
+Symptom: one `connIndex` repeatedly logs `control stream encountered a failure` or `failed to run the datagram handler` while the other connections stay healthy.
+
+Cause: usually UDP/QUIC interference on the network path. Since v0.1.5 the default transport is http2 (TCP 443), which avoids it.
+
+To switch explicitly:
+
+```bash
+katago-remote init --tunnel-protocol quic   # back to QUIC
+katago-remote init --tunnel-protocol auto   # let cloudflared choose
+katago-remote restart
+```
 
 ## Browser client handshake fails: Origin not authorized
 
@@ -100,7 +114,7 @@ WebSocket handshake failed: ... request Origin "xxx.github.io" is not authorized
 
 Cause: v0.1.2 and older only allowed same-origin WebSocket connections, so a browser page served from another domain (for example a GitHub Pages build) was rejected.
 
-Fix: upgrade to v0.1.4 or newer. The server now accepts any Origin. Authentication still relies only on the private token in the link; no client-side change is needed.
+Fix: upgrade to v0.1.5 or newer. The server now accepts any Origin. Authentication still relies only on the private token in the link; no client-side change is needed.
 
 ## The link was accidentally shared
 

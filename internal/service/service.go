@@ -34,6 +34,7 @@ type InitOptions struct {
 	TunnelMode     string
 	TunnelHostname string
 	TunnelToken    string
+	TunnelProtocol string
 }
 
 type Status struct {
@@ -112,6 +113,13 @@ func Initialize(home string, options InitOptions) error {
 	}
 	if options.TunnelHostname != "" {
 		cfg.TunnelHostname = strings.ToLower(strings.TrimSpace(options.TunnelHostname))
+	}
+	if options.TunnelProtocol != "" {
+		protocol, err := appconfig.NormalizeTunnelProtocol(options.TunnelProtocol)
+		if err != nil {
+			return err
+		}
+		cfg.TunnelProtocol = protocol
 	}
 	if cfg.NamedTunnel() {
 		if cfg.TunnelHostname == "" {
@@ -195,6 +203,14 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 		close(serverDone)
 	}()
 
+	protocol := cfg.TunnelProtocol
+	if configured := strings.TrimSpace(os.Getenv("TUNNEL_TRANSPORT_PROTOCOL")); configured != "" {
+		// An explicit environment variable still wins, matching cloudflared.
+		protocol = configured
+	}
+	if protocol == appconfig.TunnelProtocolAuto {
+		protocol = ""
+	}
 	tunnelProcess, baseURL, err := startTunnel(ctx, tunnelSpec{
 		Executable:   cfg.CloudflaredPath,
 		LocalAddress: cfg.Listen,
@@ -202,6 +218,7 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 		Named:        cfg.NamedTunnel(),
 		Hostname:     cfg.TunnelHostname,
 		Token:        tunnelToken,
+		Protocol:     protocol,
 	}, logger)
 	if err != nil {
 		shutdown(ctx, server, engine, nil)

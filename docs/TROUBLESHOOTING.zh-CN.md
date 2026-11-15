@@ -88,7 +88,21 @@ katago-remote restart
 
 原因：v0.1.2 及更早版本把 KataGo 的 warning 当成分析结束，提前删除了该查询的路由，后续分析结果全部被丢弃。LizzieYzy Next 会在顶层发送 `playoutDoublingAdvantage`，KataGo 对未知字段发 warning，正好触发这个问题。
 
-解决：升级到 v0.1.4 或更新。该版本会让 warning 之后的查询继续有效，并把顶层 `playoutDoublingAdvantage` 移入 `overrideSettings`，警告也会消失。
+解决：升级到 v0.1.5 或更新。该版本会让 warning 之后的查询继续有效，并把顶层 `playoutDoublingAdvantage` 移入 `overrideSettings`，警告也会消失。
+
+## 隧道连接反复重连（connIndex）
+
+症状：`cloudflared` 日志里某个 `connIndex` 反复出现 `control stream encountered a failure` / `failed to run the datagram handler`，但其他连接正常。
+
+原因：多半是 UDP/QUIC 路径被网络设备干扰。v0.1.5 起默认改用 http2（TCP 443），一般不再出现。
+
+如果仍有问题，可以显式切换：
+
+```bash
+katago-remote init --tunnel-protocol quic   # 回到 QUIC
+katago-remote init --tunnel-protocol auto   # 让 cloudflared 自选
+katago-remote restart
+```
 
 ## 浏览器客户端握手失败：Origin 未授权
 
@@ -100,7 +114,7 @@ WebSocket handshake failed: ... request Origin "xxx.github.io" is not authorized
 
 原因：v0.1.2 及更早版本只允许同源 WebSocket 连接，浏览器页面（比如托管在 GitHub Pages 上的 web-katrain）会被拒绝。
 
-解决：升级到 v0.1.4 或更新，服务端已允许所有 Origin。鉴权仍然只依赖链接里的私密令牌，不需要在客户端做任何配置。
+解决：升级到 v0.1.5 或更新，服务端已允许所有 Origin。鉴权仍然只依赖链接里的私密令牌，不需要在客户端做任何配置。
 
 ## 不小心公开了链接
 

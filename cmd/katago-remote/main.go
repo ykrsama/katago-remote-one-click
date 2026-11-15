@@ -105,6 +105,7 @@ func initCommand(args []string, output io.Writer) error {
 	tunnelMode := flags.String("tunnel-mode", "", "tunnel mode: quick or named")
 	tunnelHostname := flags.String("tunnel-hostname", "", "fixed public hostname for a named tunnel")
 	tunnelTokenFile := flags.String("tunnel-token-file", "", "file holding the named tunnel token ('-' reads stdin)")
+	tunnelProtocol := flags.String("tunnel-protocol", "", "tunnel transport: http2 (default), quic, or auto")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -131,6 +132,7 @@ func initCommand(args []string, output io.Writer) error {
 		TunnelMode:     mode,
 		TunnelHostname: *tunnelHostname,
 		TunnelToken:    tunnelToken,
+		TunnelProtocol: *tunnelProtocol,
 	}); err != nil {
 		return err
 	}

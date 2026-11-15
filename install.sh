@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="v0.1.4"
+VERSION="v0.1.5"
 REPOSITORY="ykrsama/katago-remote-one-click"
 
 APP_URL="https://github.com/${REPOSITORY}/releases/download/${VERSION}/katago-remote-linux-amd64"
-APP_SHA256="d2eb96348fcf45fe779b1125406c555cd99a91b19b1d26d6863813773dd56253"
+APP_SHA256="f01b75a91ba61ae2eb1a96216ec794694063d444d4bc1e62bb45d08f7eee7167"
 
 CLOUDFLARED_VERSION="2026.8.3"
 CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
@@ -38,7 +38,7 @@ usage() {
 KataGo Remote One-Click / KataGo 远程算力一键部署
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.4/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.5/install.sh | bash
   bash install.sh [--no-start] [--dry-run]
 
 Options:
@@ -54,6 +54,7 @@ Optional environment variables:
   KATAGO_REMOTE_HUMAN_MODEL         Set to 1 to download the KataGo Human SL model
                                     (about 95 MB) and enable humanSLProfile queries.
   KATAGO_REMOTE_HUMAN_MODEL_PATH    Use an existing Human SL model file.
+  KATAGO_REMOTE_TUNNEL_PROTOCOL   Transport: http2 (default), quic, or auto.
   KATAGO_REMOTE_TUNNEL_MODE       Tunnel mode: quick (default) or named.
   KATAGO_REMOTE_TUNNEL_HOSTNAME   Fixed hostname for a named tunnel, for example
                                   katago.ykrsama.org.
@@ -155,6 +156,12 @@ TUNNEL_MODE="${KATAGO_REMOTE_TUNNEL_MODE:-}"
 TUNNEL_HOSTNAME="${KATAGO_REMOTE_TUNNEL_HOSTNAME:-}"
 TUNNEL_TOKEN="${KATAGO_REMOTE_TUNNEL_TOKEN:-}"
 TUNNEL_TOKEN_FILE="${KATAGO_REMOTE_TUNNEL_TOKEN_FILE:-}"
+TUNNEL_PROTOCOL="${KATAGO_REMOTE_TUNNEL_PROTOCOL:-}"
+
+case "${TUNNEL_PROTOCOL}" in
+  ""|http2|quic|auto) ;;
+  *) fail "KATAGO_REMOTE_TUNNEL_PROTOCOL must be http2, quic, or auto" ;;
+esac
 
 case "${TUNNEL_MODE}" in
   ""|quick|named) ;;
@@ -287,6 +294,9 @@ if [[ -n "${HUMAN_MODEL_PATH}" ]]; then
 fi
 if [[ "${TUNNEL_MODE}" == "named" ]]; then
   INIT_ARGS+=(--tunnel-mode named --tunnel-hostname "${TUNNEL_HOSTNAME}")
+  if [[ -n "${TUNNEL_PROTOCOL}" ]]; then
+    INIT_ARGS+=(--tunnel-protocol "${TUNNEL_PROTOCOL}")
+  fi
   if [[ -n "${TUNNEL_TOKEN_FILE}" ]]; then
     INIT_ARGS+=(--tunnel-token-file "${TUNNEL_TOKEN_FILE}")
     "${APP_PATH}" init "${INIT_ARGS[@]}"

@@ -77,3 +77,25 @@ func TestRedactSecret(t *testing.T) {
 		t.Fatalf("redaction failed: %q", got)
 	}
 }
+
+func TestNamedTunnelProtocolEnvironment(t *testing.T) {
+	_, environment := tunnelCommand(tunnelSpec{
+		Named:    true,
+		Hostname: "katago.example.org",
+		Token:    "token-value",
+		Protocol: "http2",
+	})
+	joined := strings.Join(environment, " ")
+	if !strings.Contains(joined, "TUNNEL_TRANSPORT_PROTOCOL=http2") {
+		t.Fatalf("environment = %q", environment)
+	}
+
+	_, environment = tunnelCommand(tunnelSpec{
+		Named:    true,
+		Hostname: "katago.example.org",
+		Token:    "token-value",
+	})
+	if strings.Contains(strings.Join(environment, " "), "TUNNEL_TRANSPORT_PROTOCOL") {
+		t.Fatalf("auto protocol should not set the env: %q", environment)
+	}
+}

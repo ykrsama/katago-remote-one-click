@@ -25,6 +25,13 @@ const (
 	TunnelModeQuick = "quick"
 	// TunnelModeNamed runs a Cloudflare tunnel token and serves a fixed hostname.
 	TunnelModeNamed = "named"
+
+	// TunnelProtocolHTTP2 uses TCP 443, which is usually the most reliable choice.
+	TunnelProtocolHTTP2 = "http2"
+	// TunnelProtocolQUIC uses UDP 7844.
+	TunnelProtocolQUIC = "quic"
+	// TunnelProtocolAuto lets cloudflared choose.
+	TunnelProtocolAuto = "auto"
 )
 
 type Config struct {
@@ -36,6 +43,7 @@ type Config struct {
 	CloudflaredPath   string        `json:"cloudflaredPath"`
 	TunnelMode        string        `json:"tunnelMode,omitempty"`
 	TunnelHostname    string        `json:"tunnelHostname,omitempty"`
+	TunnelProtocol    string        `json:"tunnelProtocol,omitempty"`
 	MaxMessageBytes   int64         `json:"maxMessageBytes"`
 	MaxVisits         int64         `json:"maxVisits"`
 	StartupTimeoutSec int           `json:"startupTimeoutSeconds"`
@@ -49,6 +57,7 @@ func Default() Config {
 	return Config{
 		Listen:            "127.0.0.1:8765",
 		TunnelMode:        TunnelModeQuick,
+		TunnelProtocol:    TunnelProtocolHTTP2,
 		MaxMessageBytes:   4 << 20,
 		MaxVisits:         10_000_000,
 		StartupTimeoutSec: 45,
@@ -82,6 +91,9 @@ func Load(home string) (Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
+	if cfg.TunnelProtocol, err = NormalizeTunnelProtocol(cfg.TunnelProtocol); err != nil {
+		return Config{}, err
+	}
 	cfg.StartupTimeout = time.Duration(cfg.StartupTimeoutSec) * time.Second
 	cfg.TunnelTimeout = time.Duration(cfg.TunnelTimeoutSec) * time.Second
 	return cfg, nil
@@ -93,6 +105,9 @@ func (cfg Config) Validate() error {
 	}
 	mode, err := NormalizeTunnelMode(cfg.TunnelMode)
 	if err != nil {
+		return err
+	}
+	if _, err := NormalizeTunnelProtocol(cfg.TunnelProtocol); err != nil {
 		return err
 	}
 	hostname := strings.TrimSpace(cfg.TunnelHostname)
@@ -152,6 +167,20 @@ func NormalizeTunnelMode(value string) (string, error) {
 }
 
 // NamedTunnel reports whether the configuration serves a fixed Cloudflare hostname.
+// NormalizeTunnelProtocol returns the effective cloudflared transport protocol.
+func NormalizeTunnelProtocol(value string) (string, error) {
+	switch protocol := strings.ToLower(strings.TrimSpace(value)); protocol {
+	case "", TunnelProtocolHTTP2:
+		return TunnelProtocolHTTP2, nil
+	case TunnelProtocolQUIC:
+		return TunnelProtocolQUIC, nil
+	case TunnelProtocolAuto:
+		return TunnelProtocolAuto, nil
+	default:
+		return "", fmt.Errorf("tunnelProtocol must be %q, %q, or %q", TunnelProtocolHTTP2, TunnelProtocolQUIC, TunnelProtocolAuto)
+	}
+}
+
 func (cfg Config) NamedTunnel() bool {
 	mode, err := NormalizeTunnelMode(cfg.TunnelMode)
 	return err == nil && mode == TunnelModeNamed

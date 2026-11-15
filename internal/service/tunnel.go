@@ -29,6 +29,7 @@ type tunnelSpec struct {
 	Named        bool
 	Hostname     string
 	Token        string
+	Protocol     string
 }
 
 type tunnelStartupEvent struct {
@@ -48,8 +49,11 @@ type tunnel struct {
 // `cloudflared tunnel --no-autoupdate run`.
 func tunnelCommand(spec tunnelSpec) (args []string, environment []string) {
 	if spec.Named {
-		return []string{"tunnel", "--no-autoupdate", "run"},
-			[]string{"TUNNEL_TOKEN=" + spec.Token}
+		environment := []string{"TUNNEL_TOKEN=" + spec.Token}
+		if protocol := strings.TrimSpace(spec.Protocol); protocol != "" {
+			environment = append(environment, "TUNNEL_TRANSPORT_PROTOCOL="+protocol)
+		}
+		return []string{"tunnel", "--no-autoupdate", "run"}, environment
 	}
 	return []string{
 		"tunnel",

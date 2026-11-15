@@ -19,7 +19,7 @@
 准备一台 **Linux x86_64 + NVIDIA 显卡**的服务器。租用服务器时优先选择带 **CUDA 12 + cuDNN 9** 的系统镜像，然后在终端运行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.4/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.5/install.sh | bash
 ```
 
 首次安装会下载数百 MB 文件，耗时取决于服务器网络。每个文件使用前都会核对固定 SHA-256，下载损坏或内容被替换时会立即停止。
@@ -38,7 +38,7 @@ wss://example-name.trycloudflare.com/katago/<私密令牌>
 
 没有自己的 GPU 服务器时，可以使用带步骤说明的 Colab 笔记本。Colab 是否提供 GPU、GPU 型号和使用时长都由 Google 决定，本项目无法保证。
 
-[![在 Colab 中打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ykrsama/katago-remote-one-click/blob/v0.1.4/colab/KataGo_Remote_One_Click.ipynb)
+[![在 Colab 中打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ykrsama/katago-remote-one-click/blob/v0.1.5/colab/KataGo_Remote_One_Click.ipynb)
 
 ## 安装了什么
 
@@ -47,7 +47,7 @@ wss://example-name.trycloudflare.com/katago/<私密令牌>
 | KataGo | 1.18.2 CUDA 12.1 | 官方分析引擎 |
 | Transformer 10B | 官方中型权重 | 棋力、速度和显存占用更均衡的默认模型 |
 | cloudflared | 2026.8.3 | 建立加密 WSS 通道（临时或固定域名） |
-| katago-remote | 0.1.4 | 安全协议桥接、链接生成和启停管理 |
+| katago-remote | 0.1.5 | 安全协议桥接、链接生成和启停管理 |
 
 文件默认放在 `~/.local/share/katago-remote-one-click`。服务只监听服务器自身的 `127.0.0.1`，不会要求开放公网入站端口；WSS 路径使用随机 256 位令牌；允许多个客户端同时连接，单个客户端也可以同时提交多个分析请求；它们共享同一块 GPU，同时分析会互相分摊速度。
 
@@ -72,6 +72,16 @@ katago-remote doctor      # 检查显卡、文件和 KataGo 是否能启动
 ```
 
 `trycloudflare.com` 域名是临时的，服务重启或服务器重启后通常会变化。重新运行 `katago-remote show`，把新链接粘贴到 LizzieYzy Next 即可。
+
+## 隧道传输协议
+
+命名隧道默认使用 **http2（TCP 443）**，在国内网络比 QUIC/UDP 更稳，对分析流量性能影响可忽略。需要时可以切换：
+
+```bash
+katago-remote init --tunnel-protocol quic   # 用 UDP 7844
+katago-remote init --tunnel-protocol auto   # 让 cloudflared 自选
+katago-remote restart
+```
 
 ## 私密链接管理
 
@@ -103,7 +113,7 @@ katago-remote link delete 7ee5cc36          # 删除并断开它的在用会话
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.4/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.5/install.sh
 
 KATAGO_REMOTE_KATAGO_PATH=/opt/katago/katago \
 KATAGO_REMOTE_MODEL_PATH=/opt/katago/model.bin.gz \
