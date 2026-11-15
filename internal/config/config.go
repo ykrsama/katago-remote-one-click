@@ -49,7 +49,7 @@ func Default() Config {
 		Listen:            "127.0.0.1:8765",
 		TunnelMode:        TunnelModeQuick,
 		MaxMessageBytes:   4 << 20,
-		MaxVisits:         1_000_000,
+		MaxVisits:         10_000_000,
 		StartupTimeoutSec: 45,
 		TunnelTimeoutSec:  45,
 	}

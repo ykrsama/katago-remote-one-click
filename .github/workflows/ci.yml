@@ -49,6 +49,6 @@ jobs:
       - name: Check known Go vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
       - name: Verify reproducible release build
-        run: scripts/build-release.sh v0.1.1
+        run: scripts/build-release.sh v0.1.2
       - name: Verify clean tree
         run: git diff --exit-code

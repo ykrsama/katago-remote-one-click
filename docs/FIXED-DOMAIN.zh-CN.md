@@ -44,14 +44,14 @@ katago-remote bridge -> KataGo
 先确认版本：
 
 ```bash
-~/.local/bin/katago-remote version   # 需要 v0.1.1 或更新
+~/.local/bin/katago-remote version   # 需要 v0.1.2 或更新
 ```
 
 还是 `v0.1.0` 时，最省事的是带上隧道变量重跑安装器。它只会重新下载哈希已变化的二进制，KataGo、权重和配置会复用，并在最后写入命名隧道配置：
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.1/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.2/install.sh
 
 KATAGO_REMOTE_TUNNEL_HOSTNAME=katago.ykrsama.org \
 KATAGO_REMOTE_TUNNEL_TOKEN='eyJ...' \
@@ -78,11 +78,11 @@ token 会被复制到 `~/.local/share/katago-remote-one-click/state/tunnel-token
 
 ### 2b. 新装服务器
 
-在 v0.1.1 及之后，把变量传给 **Bash**（而不是 `curl`）：
+在 v0.1.2 及之后，把变量传给 **Bash**（而不是 `curl`）：
 
 ```bash
 curl -fsSLo /tmp/katago-remote-install.sh \
-  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.1/install.sh
+  https://raw.githubusercontent.com/ykrsama/katago-remote-one-click/v0.1.2/install.sh
 
 KATAGO_REMOTE_TUNNEL_HOSTNAME=katago.ykrsama.org \
 KATAGO_REMOTE_TUNNEL_TOKEN='eyJ...' \
@@ -102,7 +102,7 @@ git clone https://github.com/ykrsama/katago-remote-one-click
 cd katago-remote-one-click
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -trimpath -buildvcs=false \
-  -ldflags "-s -w -X main.version=v0.1.1" \
+  -ldflags "-s -w -X main.version=v0.1.2" \
   -o katago-remote-linux-amd64 ./cmd/katago-remote
 ```
 

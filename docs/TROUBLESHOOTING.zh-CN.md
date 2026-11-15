@@ -63,6 +63,25 @@ katago-remote show
 
 同一时间只允许一个客户端连接。请先关闭旧客户端，再连接另一台电脑。
 
+## LizzieYzy Next 连上后立刻报 maxVisits
+
+症状：`[remote-ws] 自建算力已连接` 之后，`kata-analyze` 立刻返回：
+
+```text
+[remote-ws] 自建算力错误：maxVisits must be between 1 and 1000000
+```
+
+KaTrain 等客户端却正常。
+
+原因：LizzieYzy Next 的实时分析固定发送 `maxVisits: 10000000`，v0.1.1 及更早版本把超过服务端上限（1,000,000）的请求当成协议错误。
+
+解决：升级到 v0.1.2 或更新。服务端改为把超限值截断到上限，客户端不需要改任何设置。已有 `config.json` 会保留旧安装器写入的 `maxVisits: 1000000`；想让上限也变成 10,000,000，再执行：
+
+```bash
+katago-remote init --max-visits 10000000
+katago-remote restart
+```
+
 ## 不小心公开了链接
 
 立即运行：

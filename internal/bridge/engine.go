@@ -68,7 +68,7 @@ func Start(ctx context.Context, cfg EngineConfig, logger *log.Logger) (*Engine, 
 		return nil, errors.New("KataGo executable, model, and analysis config are required")
 	}
 	if cfg.MaxVisits <= 0 {
-		cfg.MaxVisits = 1_000_000
+		cfg.MaxVisits = 10_000_000
 	}
 	if cfg.StartupTimeout <= 0 {
 		cfg.StartupTimeout = 45 * time.Second
@@ -249,8 +249,18 @@ func (e *Engine) validateQuery(payload []byte) (map[string]any, string, error) {
 	}
 	if value, exists := query["maxVisits"]; exists {
 		visits, err := integerValue(value)
-		if err != nil || visits < 1 || visits > e.cfg.MaxVisits {
-			return nil, originalID, fmt.Errorf("maxVisits must be between 1 and %d", e.cfg.MaxVisits)
+		if err != nil {
+			return nil, originalID, errors.New("maxVisits must be an integer")
+		}
+		switch {
+		case visits < 1:
+			// Some clients send 0 to mean "no explicit limit" (KataGo itself
+			// requires a positive value), so forward the query without it.
+			delete(query, "maxVisits")
+		case visits > e.cfg.MaxVisits:
+			// Clamp instead of failing: real clients such as LizzieYzy Next ask
+			// for 10,000,000 visits during live analysis.
+			query["maxVisits"] = e.cfg.MaxVisits
 		}
 	}
 	if turns, ok := query["analyzeTurns"].([]any); ok && len(turns) > 4096 {

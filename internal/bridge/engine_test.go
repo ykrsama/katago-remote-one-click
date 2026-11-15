@@ -111,7 +111,7 @@ func TestEngineRejectsUnsafeRequestsAsProtocolErrors(t *testing.T) {
 	engine := startFakeEngine(t)
 	sender := &channelSender{id: "invalid", messages: make(chan []byte, 8)}
 	for _, payload := range [][]byte{
-		[]byte(`{"id":"too-deep","maxVisits":1000001}`),
+		[]byte(`{"id":"bad-max-visits","maxVisits":"many"}`),
 		[]byte(`{"id":"bad-action","action":"shell"}`),
 		[]byte(`{"id":"first"} {"id":"second"}`),
 		[]byte(`not-json`),
@@ -123,6 +123,41 @@ func TestEngineRejectsUnsafeRequestsAsProtocolErrors(t *testing.T) {
 		if _, ok := response["error"]; !ok {
 			t.Fatalf("missing protocol error: %#v", response)
 		}
+	}
+}
+
+func TestValidateQueryClampsMaxVisits(t *testing.T) {
+	engine := &Engine{cfg: EngineConfig{MaxVisits: 1_000_000}}
+
+	query, id, err := engine.validateQuery([]byte(`{"id":"clamped","maxVisits":10000000}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "clamped" {
+		t.Fatalf("id = %q", id)
+	}
+	if got, ok := query["maxVisits"].(int64); !ok || got != 1_000_000 {
+		t.Fatalf("maxVisits = %#v, want 1000000", query["maxVisits"])
+	}
+
+	query, _, err = engine.validateQuery([]byte(`{"id":"unlimited","maxVisits":0}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := query["maxVisits"]; exists {
+		t.Fatalf("zero maxVisits was forwarded: %#v", query["maxVisits"])
+	}
+
+	query, _, err = engine.validateQuery([]byte(`{"id":"kept","maxVisits":500}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := query["maxVisits"].(json.Number); !ok || got.String() != "500" {
+		t.Fatalf("maxVisits = %#v, want 500", query["maxVisits"])
+	}
+
+	if _, _, err := engine.validateQuery([]byte(`{"id":"bad","maxVisits":"many"}`)); err == nil {
+		t.Fatal("non-numeric maxVisits was accepted")
 	}
 }
 

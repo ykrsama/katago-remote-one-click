@@ -32,7 +32,7 @@ This prevents a reconnecting client from receiving results that belong to the pr
 - The HTTP listener must resolve to `127.0.0.1` or `localhost`.
 - The WebSocket endpoint requires a random token in its path.
 - Token and runtime state files are created with user-only permissions.
-- Messages are size-limited, and `maxVisits` is capped by server configuration.
+- Messages are size-limited, and `maxVisits` above the configured ceiling (default 10,000,000) is clamped rather than rejected. A `maxVisits` of `0` is treated as "no explicit limit" and omitted before the request reaches KataGo. LizzieYzy Next's live analysis asks for 10,000,000 visits.
 - The bridge launches KataGo directly without a shell and accepts no remote command-line input.
 - The full private URL is printed only on explicit `start`, `show`, or `reset-link` commands and is omitted from service logs.
 

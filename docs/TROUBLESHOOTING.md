@@ -63,6 +63,25 @@ A named tunnel keeps its hostname; only the private token rotates. `restart` kee
 
 Only one client may be connected. Close the old client before connecting another one.
 
+## LizzieYzy Next fails with maxVisits right after connecting
+
+Symptom: after `[remote-ws] 自建算力已连接`, `kata-analyze` immediately returns:
+
+```text
+[remote-ws] 自建算力错误：maxVisits must be between 1 and 1000000
+```
+
+KaTrain and other clients work fine.
+
+Cause: LizzieYzy Next always sends `maxVisits: 10000000` for live analysis, and v0.1.1 and older treated values above the server ceiling (1,000,000) as protocol errors.
+
+Fix: upgrade to v0.1.2 or newer. The server now clamps oversized values instead of failing, so no client-side change is required. Existing `config.json` files keep the `maxVisits: 1000000` written by the old installer; to use the new 10,000,000 ceiling, run:
+
+```bash
+katago-remote init --max-visits 10000000
+katago-remote restart
+```
+
 ## The link was accidentally shared
 
 Revoke it immediately:
