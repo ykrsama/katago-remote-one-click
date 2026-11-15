@@ -307,6 +307,22 @@ func (e *Engine) validateQuery(payload []byte) (map[string]any, string, error) {
 			query["maxVisits"] = e.cfg.MaxVisits
 		}
 	}
+	if value, exists := query["playoutDoublingAdvantage"]; exists {
+		// LizzieYzy Next sends this as a top-level field, but KataGo only reads it
+		// from overrideSettings and warns about the unused field. Move it so the
+		// setting takes effect and no warning is emitted.
+		settings, ok := query["overrideSettings"].(map[string]any)
+		if ok || query["overrideSettings"] == nil {
+			if settings == nil {
+				settings = make(map[string]any)
+			}
+			if _, present := settings["playoutDoublingAdvantage"]; !present {
+				settings["playoutDoublingAdvantage"] = value
+			}
+			query["overrideSettings"] = settings
+			delete(query, "playoutDoublingAdvantage")
+		}
+	}
 	if turns, ok := query["analyzeTurns"].([]any); ok && len(turns) > 4096 {
 		return nil, originalID, errors.New("analyzeTurns exceeds the 4096-position safety limit")
 	}
@@ -457,7 +473,14 @@ func shouldComplete(response map[string]any, r *route) bool {
 	if r.action != "" {
 		return true
 	}
-	if during, _ := response["isDuringSearch"].(bool); during {
+	during, isAnalysis := response["isDuringSearch"].(bool)
+	if !isAnalysis {
+		// Warnings and other informational messages (for example an unused-field
+		// warning) do not finish the query; later analysis results must still be
+		// delivered to the client.
+		return false
+	}
+	if during {
 		return false
 	}
 	r.remainingFinals--

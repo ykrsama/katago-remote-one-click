@@ -32,7 +32,7 @@ This prevents a reconnecting client from receiving results that belong to the pr
 ## Safety boundaries
 
 - The HTTP listener must resolve to `127.0.0.1` or `localhost`.
-- The WebSocket endpoint requires a random token in its path. Tokens live in `state/links.json` (mode `600`); each link records a client limit (`-1` unlimited, `0` disabled, `N`), and the bridge reloads the registry every two seconds to apply edits.
+- The WebSocket endpoint requires a random token in its path. Cross-origin WebSocket upgrades are accepted because the path token is the only credential and no cookies are involved (browser clients such as a GitHub Pages build work without a whitelist). Tokens live in `state/links.json` (mode `600`); each link records a client limit (`-1` unlimited, `0` disabled, `N`), and the bridge reloads the registry every two seconds to apply edits.
 - Token and runtime state files are created with user-only permissions.
 - Messages are size-limited, and `maxVisits` above the configured ceiling (default 10,000,000) is clamped rather than rejected. A `maxVisits` of `0` is treated as "no explicit limit" and omitted before the request reaches KataGo. LizzieYzy Next's live analysis asks for 10,000,000 visits.
 - The bridge launches KataGo directly without a shell and accepts no remote command-line input.

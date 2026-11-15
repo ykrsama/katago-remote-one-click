@@ -96,6 +96,22 @@ func TestWebSocketServerAuthenticationAndConcurrentClients(t *testing.T) {
 	sendQueryAndReadID(t, second, "second-client")
 }
 
+func TestCrossOriginClientsAreAccepted(t *testing.T) {
+	_, _, base := startTestServer(t)
+	connection, _, err := websocket.Dial(
+		context.Background(),
+		base+"/katago/"+defaultTestToken,
+		&websocket.DialOptions{
+			HTTPHeader: http.Header{"Origin": []string{"https://ykrsama.github.io"}},
+		},
+	)
+	if err != nil {
+		t.Fatalf("cross-origin dial failed: %v", err)
+	}
+	t.Cleanup(func() { _ = connection.CloseNow() })
+	sendQueryAndReadID(t, connection, "cross-origin")
+}
+
 func TestLinkClientLimitRejectsExtraClients(t *testing.T) {
 	_, store, base := startTestServer(t)
 	limited, err := store.Create(1)

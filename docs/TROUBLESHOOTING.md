@@ -82,6 +82,26 @@ katago-remote init --max-visits 10000000
 katago-remote restart
 ```
 
+## LizzieYzy Next connects but shows no candidate moves
+
+Symptom: `自建算力已连接` appears, `kata-analyze` produces only an `Unexpected or unused field ... playoutDoublingAdvantage` warning, no candidate moves are displayed, and the next analysis reports `another websocket analysis query is still active`.
+
+Cause: v0.1.2 and older treated any KataGo warning as the end of the analysis and removed the query route, so every later result was dropped. LizzieYzy Next sends `playoutDoublingAdvantage` at the top level, KataGo warns about the unknown field, and that warning triggered the bug.
+
+Fix: upgrade to v0.1.4 or newer. It keeps the query alive after warnings and moves the top-level `playoutDoublingAdvantage` into `overrideSettings`, which also removes the warning.
+
+## Browser client handshake fails: Origin not authorized
+
+Symptom: the service log shows
+
+```text
+WebSocket handshake failed: ... request Origin "xxx.github.io" is not authorized for Host "katago.ykrsama.org"
+```
+
+Cause: v0.1.2 and older only allowed same-origin WebSocket connections, so a browser page served from another domain (for example a GitHub Pages build) was rejected.
+
+Fix: upgrade to v0.1.4 or newer. The server now accepts any Origin. Authentication still relies only on the private token in the link; no client-side change is needed.
+
 ## The link was accidentally shared
 
 Revoke it immediately:

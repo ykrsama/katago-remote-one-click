@@ -82,6 +82,26 @@ katago-remote init --max-visits 10000000
 katago-remote restart
 ```
 
+## LizzieYzy Next 连上但没有选点
+
+症状：显示 `自建算力已连接`，`kata-analyze` 之后只有一条 `Unexpected or unused field ... playoutDoublingAdvantage` 警告，界面没有候选点，随后出现 `another websocket analysis query is still active`。
+
+原因：v0.1.2 及更早版本把 KataGo 的 warning 当成分析结束，提前删除了该查询的路由，后续分析结果全部被丢弃。LizzieYzy Next 会在顶层发送 `playoutDoublingAdvantage`，KataGo 对未知字段发 warning，正好触发这个问题。
+
+解决：升级到 v0.1.4 或更新。该版本会让 warning 之后的查询继续有效，并把顶层 `playoutDoublingAdvantage` 移入 `overrideSettings`，警告也会消失。
+
+## 浏览器客户端握手失败：Origin 未授权
+
+症状：服务端日志出现
+
+```text
+WebSocket handshake failed: ... request Origin "xxx.github.io" is not authorized for Host "katago.ykrsama.org"
+```
+
+原因：v0.1.2 及更早版本只允许同源 WebSocket 连接，浏览器页面（比如托管在 GitHub Pages 上的 web-katrain）会被拒绝。
+
+解决：升级到 v0.1.4 或更新，服务端已允许所有 Origin。鉴权仍然只依赖链接里的私密令牌，不需要在客户端做任何配置。
+
 ## 不小心公开了链接
 
 立即运行：

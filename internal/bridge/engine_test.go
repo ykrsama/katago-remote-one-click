@@ -126,6 +126,48 @@ func TestEngineRejectsUnsafeRequestsAsProtocolErrors(t *testing.T) {
 	}
 }
 
+func TestWarningDoesNotEndAnalysisQuery(t *testing.T) {
+	engine := startFakeEngine(t)
+	sender := &channelSender{id: "warning", messages: make(chan []byte, 8)}
+	payload := []byte(`{"id":"warned","testWarning":true,"analyzeTurns":[0]}`)
+	if err := engine.Submit(context.Background(), sender, payload); err != nil {
+		t.Fatal(err)
+	}
+	warning := receiveJSON(t, sender.messages)
+	if warning["id"] != "warned" || warning["warning"] == "" {
+		t.Fatalf("warning response = %#v", warning)
+	}
+	result := receiveJSON(t, sender.messages)
+	if result["id"] != "warned" {
+		t.Fatalf("analysis result after warning = %#v", result)
+	}
+}
+
+func TestLegacyPlayoutDoublingAdvantageMovesIntoOverrideSettings(t *testing.T) {
+	engine := &Engine{cfg: EngineConfig{MaxVisits: 1_000_000}}
+
+	query, _, err := engine.validateQuery([]byte(`{"id":"pda","playoutDoublingAdvantage":0.5}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := query["playoutDoublingAdvantage"]; exists {
+		t.Fatal("top-level playoutDoublingAdvantage was forwarded")
+	}
+	settings, ok := query["overrideSettings"].(map[string]any)
+	if !ok || fmt.Sprint(settings["playoutDoublingAdvantage"]) != "0.5" {
+		t.Fatalf("overrideSettings = %#v", query["overrideSettings"])
+	}
+
+	query, _, err = engine.validateQuery([]byte(`{"id":"pda-explicit","playoutDoublingAdvantage":0.5,"overrideSettings":{"playoutDoublingAdvantage":1}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, _ = query["overrideSettings"].(map[string]any)
+	if fmt.Sprint(settings["playoutDoublingAdvantage"]) != "1" {
+		t.Fatalf("explicit override was replaced: %#v", settings)
+	}
+}
+
 func TestDuplicateQueryIDReplacesPreviousQuery(t *testing.T) {
 	engine := startFakeEngine(t)
 	sender := &channelSender{id: "replace", messages: make(chan []byte, 8)}
@@ -328,6 +370,13 @@ func runFakeKataGoProcess() {
 			case "terminate_all", "clear_cache", "query_models":
 				write(map[string]any{"id": id, "action": action})
 			default:
+				if _, ok := query["testWarning"].(bool); ok {
+					write(map[string]any{
+						"id":      id,
+						"field":   "playoutDoublingAdvantage",
+						"warning": "Unexpected or unused field, do you have a typo?",
+					})
+				}
 				if value, ok := query["testDelayMs"].(float64); ok {
 					time.Sleep(time.Duration(value) * time.Millisecond)
 				}

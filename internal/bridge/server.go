@@ -125,6 +125,11 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 
 	connection, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		CompressionMode: websocket.CompressionDisabled,
+		// Browser clients are often served from another origin (for example a
+		// GitHub Pages build). Origin checks protect cookie-based authentication;
+		// here the private path token is the only credential, so any origin is
+		// allowed to connect.
+		InsecureSkipVerify: true,
 	})
 	if err != nil {
 		s.logger.Printf("WebSocket handshake failed: %v", err)
