@@ -35,7 +35,24 @@ katago-remote start
 katago-remote show
 ```
 
-Paste the newly displayed link into the client.
+Paste the newly displayed link into the client. A fixed hostname from a named tunnel does not change.
+
+## The fixed hostname fails (1033 / 502 / 404)
+
+First check that the tunnel's **Public Hostname** Service is `http://127.0.0.1:8765` and matches `listen` in `config.json` exactly.
+
+Opening `https://katago.ykrsama.org/` in a browser:
+
+- **404 / 401**: the tunnel works and the request simply lacked `/katago/<private-token>`. Expected.
+- **1033**: the tunnel has no live connector. Run `katago-remote status` and `katago-remote logs`, and verify the token.
+- **502**: Cloudflare cannot reach the origin. Check the Public Hostname port and whether `katago-remote show` works.
+- **DNS does not resolve**: make sure the Public Hostname was saved and the CNAME for `katago.ykrsama.org` points at `<tunnel-id>.cfargotunnel.com`.
+
+Never run the same tunnel token on several machines; Cloudflare load-balances across connectors and the link works only intermittently. See [Fixed hostname](FIXED-DOMAIN.md).
+
+## The link changed on a fixed hostname
+
+A named tunnel keeps its hostname; only the private token rotates. `restart` keeps the hostname, and `reset-link` only replaces the token. If the hostname itself changed, check `tunnelHostname` in `config.json` or run `katago-remote init --tunnel-hostname new.example.org`.
 
 ## Connection fails immediately
 

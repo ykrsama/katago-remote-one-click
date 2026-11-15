@@ -23,12 +23,15 @@ import (
 )
 
 type InitOptions struct {
-	KataGo      string
-	Model       string
-	Config      string
-	Cloudflared string
-	Listen      string
-	MaxVisits   int64
+	KataGo         string
+	Model          string
+	Config         string
+	Cloudflared    string
+	Listen         string
+	MaxVisits      int64
+	TunnelMode     string
+	TunnelHostname string
+	TunnelToken    string
 }
 
 type Status struct {
@@ -44,36 +47,73 @@ type Check struct {
 }
 
 func Initialize(home string, options InitOptions) error {
-	paths := map[string]string{
-		"KataGo":          options.KataGo,
-		"model":           options.Model,
-		"analysis config": options.Config,
-		"cloudflared":     options.Cloudflared,
+	cfg := appconfig.Default()
+	if existing, err := appconfig.Load(home); err == nil {
+		cfg = existing
 	}
-	for name, path := range paths {
-		if path == "" {
-			return fmt.Errorf("%s path is required", name)
+	paths := []struct {
+		name  string
+		value string
+		dest  *string
+	}{
+		{"KataGo", options.KataGo, &cfg.KataGoPath},
+		{"model", options.Model, &cfg.ModelPath},
+		{"analysis config", options.Config, &cfg.AnalysisConfig},
+		{"cloudflared", options.Cloudflared, &cfg.CloudflaredPath},
+	}
+	for _, item := range paths {
+		if item.value == "" {
+			continue
 		}
-		absolute, err := filepath.Abs(path)
+		absolute, err := filepath.Abs(item.value)
 		if err != nil {
-			return fmt.Errorf("resolve %s path: %w", name, err)
+			return fmt.Errorf("resolve %s path: %w", item.name, err)
 		}
 		info, err := os.Stat(absolute)
 		if err != nil || info.IsDir() {
-			return fmt.Errorf("%s was not found at %s", name, absolute)
+			return fmt.Errorf("%s was not found at %s", item.name, absolute)
 		}
-		paths[name] = absolute
+		*item.dest = absolute
 	}
-	cfg := appconfig.Default()
-	cfg.KataGoPath = paths["KataGo"]
-	cfg.ModelPath = paths["model"]
-	cfg.AnalysisConfig = paths["analysis config"]
-	cfg.CloudflaredPath = paths["cloudflared"]
+	for _, item := range paths {
+		if *item.dest == "" {
+			return fmt.Errorf("%s path is required", item.name)
+		}
+	}
 	if options.Listen != "" {
 		cfg.Listen = options.Listen
 	}
 	if options.MaxVisits > 0 {
 		cfg.MaxVisits = options.MaxVisits
+	}
+	if options.TunnelMode != "" || options.TunnelHostname != "" {
+		mode := options.TunnelMode
+		if mode == "" {
+			mode = appconfig.TunnelModeNamed
+		}
+		normalized, err := appconfig.NormalizeTunnelMode(mode)
+		if err != nil {
+			return err
+		}
+		cfg.TunnelMode = normalized
+	}
+	if options.TunnelHostname != "" {
+		cfg.TunnelHostname = strings.ToLower(strings.TrimSpace(options.TunnelHostname))
+	}
+	if cfg.NamedTunnel() {
+		if cfg.TunnelHostname == "" {
+			return errors.New("a tunnel hostname is required for a named tunnel")
+		}
+		token := strings.TrimSpace(options.TunnelToken)
+		if token != "" {
+			if err := appconfig.SaveTunnelToken(home, token); err != nil {
+				return err
+			}
+		} else if !appconfig.HasTunnelToken(home) {
+			return errors.New("a Cloudflare tunnel token is required for a named tunnel")
+		}
+	} else {
+		cfg.TunnelHostname = ""
 	}
 	if err := appconfig.Save(home, cfg); err != nil {
 		return err
@@ -93,6 +133,13 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 	token, err := appconfig.ReadToken(home)
 	if err != nil {
 		return err
+	}
+	tunnelToken := ""
+	if cfg.NamedTunnel() {
+		tunnelToken, err = appconfig.ReadTunnelToken(home)
+		if err != nil {
+			return err
+		}
 	}
 	if err := writeCurrentProcessState(home); err != nil {
 		return fmt.Errorf("record service process: %w", err)
@@ -131,13 +178,14 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 		close(serverDone)
 	}()
 
-	tunnelProcess, baseURL, err := startTunnel(
-		ctx,
-		cfg.CloudflaredPath,
-		cfg.Listen,
-		cfg.TunnelTimeout,
-		logger,
-	)
+	tunnelProcess, baseURL, err := startTunnel(ctx, tunnelSpec{
+		Executable:   cfg.CloudflaredPath,
+		LocalAddress: cfg.Listen,
+		Timeout:      cfg.TunnelTimeout,
+		Named:        cfg.NamedTunnel(),
+		Hostname:     cfg.TunnelHostname,
+		Token:        tunnelToken,
+	}, logger)
 	if err != nil {
 		shutdown(ctx, server, engine, nil)
 		return err
@@ -161,6 +209,9 @@ func Run(ctx context.Context, home, version string, logger *log.Logger) error {
 		logger.Printf("QR image could not be written: %v", err)
 	}
 	logger.Printf("secure tunnel ready at %s (access token omitted)", baseURL)
+	if cfg.NamedTunnel() {
+		logger.Printf("named tunnel: the Cloudflare Public Hostname %s must target http://%s", cfg.TunnelHostname, cfg.Listen)
+	}
 
 	var runErr error
 	select {
@@ -220,11 +271,17 @@ func buildConnectionURL(baseURL, token string) (string, error) {
 }
 
 func StartDaemon(home, version string, output io.Writer) error {
-	if _, err := appconfig.Load(home); err != nil {
+	cfg, err := appconfig.Load(home)
+	if err != nil {
 		return err
 	}
 	if _, err := appconfig.ReadToken(home); err != nil {
 		return err
+	}
+	if cfg.NamedTunnel() {
+		if _, err := appconfig.ReadTunnelToken(home); err != nil {
+			return err
+		}
 	}
 	status, _ := ReadStatus(home)
 	if status.Running {
@@ -255,7 +312,6 @@ func StartDaemon(home, version string, output io.Writer) error {
 	}
 	_ = cmd.Process.Release()
 
-	cfg, _ := appconfig.Load(home)
 	deadline := time.Now().Add(cfg.StartupTimeout + cfg.TunnelTimeout + 15*time.Second)
 	for time.Now().Before(deadline) {
 		status, _ := ReadStatus(home)
@@ -376,6 +432,27 @@ func Doctor(ctx context.Context, home string) []Check {
 		return append(checks, Check{Name: "Configuration", OK: false, Message: err.Error()})
 	}
 	checks = append(checks, Check{Name: "Configuration", OK: true, Message: filepath.Join(home, appconfig.ConfigFileName)})
+	if cfg.NamedTunnel() {
+		checks = append(checks,
+			Check{Name: "Tunnel hostname", OK: true, Message: "https://" + cfg.TunnelHostname},
+			Check{
+				Name:    "Tunnel token",
+				OK:      appconfig.HasTunnelToken(home),
+				Message: filepath.Join(home, appconfig.TunnelTokenFileName),
+			},
+			Check{
+				Name:    "Tunnel ingress",
+				OK:      true,
+				Message: "Cloudflare Public Hostname must target http://" + cfg.Listen,
+			},
+		)
+	} else {
+		checks = append(checks, Check{
+			Name:    "Tunnel mode",
+			OK:      true,
+			Message: "quick (temporary trycloudflare.com hostname)",
+		})
+	}
 	for name, path := range map[string]string{
 		"KataGo":          cfg.KataGoPath,
 		"Model":           cfg.ModelPath,

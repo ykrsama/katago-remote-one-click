@@ -94,8 +94,11 @@ func initCommand(args []string, output io.Writer) error {
 	model := flags.String("model", "", "neural network model")
 	analysisConfig := flags.String("config", "", "analysis config")
 	cloudflared := flags.String("cloudflared", "", "cloudflared executable")
-	listen := flags.String("listen", "127.0.0.1:8765", "local listen address")
-	maxVisits := flags.Int64("max-visits", 1_000_000, "maximum visits accepted per request")
+	listen := flags.String("listen", "", "local listen address (default 127.0.0.1:8765)")
+	maxVisits := flags.Int64("max-visits", 0, "maximum visits accepted per request")
+	tunnelMode := flags.String("tunnel-mode", "", "tunnel mode: quick or named")
+	tunnelHostname := flags.String("tunnel-hostname", "", "fixed public hostname for a named tunnel")
+	tunnelTokenFile := flags.String("tunnel-token-file", "", "file holding the named tunnel token ('-' reads stdin)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -103,18 +106,48 @@ func initCommand(args []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
+	tunnelToken, err := readTunnelToken(*tunnelTokenFile)
+	if err != nil {
+		return err
+	}
+	mode := *tunnelMode
+	if mode == "" && (*tunnelHostname != "" || tunnelToken != "") {
+		mode = appconfig.TunnelModeNamed
+	}
 	if err := service.Initialize(resolved, service.InitOptions{
-		KataGo:      *katago,
-		Model:       *model,
-		Config:      *analysisConfig,
-		Cloudflared: *cloudflared,
-		Listen:      *listen,
-		MaxVisits:   *maxVisits,
+		KataGo:         *katago,
+		Model:          *model,
+		Config:         *analysisConfig,
+		Cloudflared:    *cloudflared,
+		Listen:         *listen,
+		MaxVisits:      *maxVisits,
+		TunnelMode:     mode,
+		TunnelHostname: *tunnelHostname,
+		TunnelToken:    tunnelToken,
 	}); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(output, "Configured / 配置完成: %s\n", resolved)
 	return nil
+}
+
+// readTunnelToken prefers an explicit file, then KATAGO_REMOTE_TUNNEL_TOKEN.
+func readTunnelToken(path string) (string, error) {
+	if path == "" {
+		return strings.TrimSpace(os.Getenv("KATAGO_REMOTE_TUNNEL_TOKEN")), nil
+	}
+	var data []byte
+	var err error
+	if path == "-" {
+		data, err = io.ReadAll(io.LimitReader(os.Stdin, appconfig.MaxTunnelTokenBytes+1))
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return "", fmt.Errorf("read tunnel token: %w", err)
+	}
+	token := strings.TrimSpace(string(data))
+	return strings.Trim(token, `"'`), nil
 }
 
 func runCommand(args []string, output io.Writer) error {
@@ -220,13 +253,17 @@ Commands:
   init        Save paths and create a private access token
   start       Start KataGo and create a secure WSS link
   stop        Stop the service safely
-  restart     Restart while keeping the same private link token
+  restart     Restart while keeping the same private token and hostname
   status      Show whether the service is running
   show        Show the current link and QR code
   reset-link  Revoke the old token and create a new link
   doctor      Check GPU, KataGo, model, and tunnel prerequisites
   logs        Show recent service logs
   version     Show the installed version
+
+Named tunnels use a fixed Cloudflare hostname:
+  katago-remote init --tunnel-mode named --tunnel-hostname katago.example.org \
+    --tunnel-token-file /path/to/tunnel-token
 
 Run the one-line installer from the project README for normal setup.`)
 }

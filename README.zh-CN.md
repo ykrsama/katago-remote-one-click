@@ -8,11 +8,11 @@
 [![Release](https://img.shields.io/github/v/release/ykrsama/katago-remote-one-click)](https://github.com/ykrsama/katago-remote-one-click/releases/latest)
 [![License](https://img.shields.io/github/license/ykrsama/katago-remote-one-click)](LICENSE)
 
-[English](README.md) | [故障排查](docs/TROUBLESHOOTING.zh-CN.md) | [安全说明](SECURITY.md)
+[English](README.md) | [固定域名](docs/FIXED-DOMAIN.zh-CN.md) | [故障排查](docs/TROUBLESHOOTING.zh-CN.md) | [安全说明](SECURITY.md)
 
 </div>
 
-不需要配置防火墙、域名、证书、Python 环境或 Cloudflare 账号。安装器会自动准备 KataGo、官方 Transformer 权重、安全连接服务和加密临时通道，最后直接显示可用的 WSS 链接与二维码。
+不需要配置防火墙、域名、证书、Python 环境或 Cloudflare 账号。安装器会自动准备 KataGo、官方 Transformer 权重、安全连接服务和加密临时通道，最后直接显示可用的 WSS 链接与二维码。想用自己的 Cloudflare 域名做固定地址，见[固定域名配置](docs/FIXED-DOMAIN.zh-CN.md)。
 
 ## 一条命令完成
 
@@ -46,7 +46,7 @@ wss://example-name.trycloudflare.com/katago/<私密令牌>
 | --- | --- | --- |
 | KataGo | 1.18.2 CUDA 12.1 | 官方分析引擎 |
 | Transformer 10B | 官方中型权重 | 棋力、速度和显存占用更均衡的默认模型 |
-| cloudflared | 2026.8.3 | 建立加密临时 WSS 通道 |
+| cloudflared | 2026.8.3 | 建立加密 WSS 通道（临时或固定域名） |
 | katago-remote | 0.1.0 | 安全协议桥接、链接生成和启停管理 |
 
 文件默认放在 `~/.local/share/katago-remote-one-click`。服务只监听服务器自身的 `127.0.0.1`，不会要求开放公网入站端口；WSS 路径使用随机 256 位令牌，一次只允许一个客户端连接。
@@ -57,7 +57,7 @@ wss://example-name.trycloudflare.com/katago/<私密令牌>
 katago-remote show        # 重新显示当前链接和二维码
 katago-remote status      # 查看是否正在运行
 katago-remote logs        # 查看最近的错误信息
-katago-remote restart     # 重启 KataGo，并生成新的临时域名
+katago-remote restart     # 重启 KataGo；临时域名会变化，固定域名不变
 katago-remote stop        # 停止引擎和连接
 katago-remote reset-link  # 立即废除旧令牌，生成新的私密链接
 katago-remote doctor      # 检查显卡、文件和 KataGo 是否能启动
@@ -70,6 +70,12 @@ katago-remote doctor      # 检查显卡、文件和 KataGo 是否能启动
 ```
 
 `trycloudflare.com` 域名是临时的，服务重启或服务器重启后通常会变化。重新运行 `katago-remote show`，把新链接粘贴到 LizzieYzy Next 即可。
+
+## 固定域名（可选）
+
+如果域名已经托管在 Cloudflare，可以改用命名隧道，让链接固定成 `wss://katago.ykrsama.org/katago/<私密令牌>`，重启服务、重启服务器、更换服务器公网 IP 都不需要重新粘贴。
+
+入口配置在 Cloudflare 控制台，`cloudflared` 运行在 GPU 服务器（生产环境）上；本机开发环境不需要运行它。完整步骤见[固定域名配置](docs/FIXED-DOMAIN.zh-CN.md)。
 
 ## 使用已有引擎或权重
 
@@ -89,7 +95,7 @@ bash /tmp/katago-remote-install.sh
 
 ## 当前支持范围
 
-首版支持 Linux x86_64 NVIDIA GPU 服务器，以及使用 KataGo Analysis JSON over WebSocket 的客户端，包括 LizzieYzy Next 和 KaTrain 兼容客户端。首版不支持原始 GTP over WebSocket、多人共享、CPU 服务器、Windows 服务器或长期生产级固定域名。
+首版支持 Linux x86_64 NVIDIA GPU 服务器，以及使用 KataGo Analysis JSON over WebSocket 的客户端，包括 LizzieYzy Next 和 KaTrain 兼容客户端。首版不支持原始 GTP over WebSocket、多人共享、CPU 服务器或 Windows 服务器；需要自己的固定域名时，使用[命名隧道](docs/FIXED-DOMAIN.zh-CN.md)。
 
 遇到问题时请先打开[中文故障排查](docs/TROUBLESHOOTING.zh-CN.md)。技术实现见[协议与架构说明](docs/PROTOCOL.md)。
 

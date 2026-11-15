@@ -47,6 +47,15 @@ Optional environment variables:
   KATAGO_REMOTE_KATAGO_PATH Use an existing KataGo executable.
   KATAGO_REMOTE_MODEL_PATH  Use an existing neural network model.
   KATAGO_REMOTE_CONFIG_PATH Use an existing analysis config.
+  KATAGO_REMOTE_TUNNEL_MODE       Tunnel mode: quick (default) or named.
+  KATAGO_REMOTE_TUNNEL_HOSTNAME   Fixed hostname for a named tunnel, for example
+                                  katago.ykrsama.org.
+  KATAGO_REMOTE_TUNNEL_TOKEN      Cloudflare Tunnel token for the named tunnel.
+  KATAGO_REMOTE_TUNNEL_TOKEN_FILE File that contains the Cloudflare Tunnel token.
+
+Named tunnels need KATAGO_REMOTE_TUNNEL_HOSTNAME plus one token source. The
+Cloudflare Public Hostname must target http://127.0.0.1:8765, which is the
+default local listen address of this service.
 EOF
 }
 
@@ -135,11 +144,41 @@ katago_works() {
   "${executable}" version >/dev/null 2>"${INSTALL_HOME}/logs/katago-version-check.log"
 }
 
+TUNNEL_MODE="${KATAGO_REMOTE_TUNNEL_MODE:-}"
+TUNNEL_HOSTNAME="${KATAGO_REMOTE_TUNNEL_HOSTNAME:-}"
+TUNNEL_TOKEN="${KATAGO_REMOTE_TUNNEL_TOKEN:-}"
+TUNNEL_TOKEN_FILE="${KATAGO_REMOTE_TUNNEL_TOKEN_FILE:-}"
+
+case "${TUNNEL_MODE}" in
+  ""|quick|named) ;;
+  *) fail "KATAGO_REMOTE_TUNNEL_MODE must be quick or named" ;;
+esac
+if [[ -n "${TUNNEL_HOSTNAME}${TUNNEL_TOKEN}${TUNNEL_TOKEN_FILE}" ]]; then
+  if [[ "${TUNNEL_MODE}" == "quick" ]]; then
+    fail "Named tunnel settings cannot be combined with KATAGO_REMOTE_TUNNEL_MODE=quick"
+  fi
+  TUNNEL_MODE="named"
+fi
+if [[ "${TUNNEL_MODE}" == "named" ]]; then
+  [[ -n "${TUNNEL_HOSTNAME}" ]] || fail "KATAGO_REMOTE_TUNNEL_HOSTNAME is required for a named tunnel"
+  if [[ -z "${TUNNEL_TOKEN}" && -z "${TUNNEL_TOKEN_FILE}" ]]; then
+    fail "KATAGO_REMOTE_TUNNEL_TOKEN or KATAGO_REMOTE_TUNNEL_TOKEN_FILE is required for a named tunnel"
+  fi
+  if [[ -n "${TUNNEL_TOKEN_FILE}" && ! -r "${TUNNEL_TOKEN_FILE}" ]]; then
+    fail "Cannot read KATAGO_REMOTE_TUNNEL_TOKEN_FILE: ${TUNNEL_TOKEN_FILE}"
+  fi
+fi
+
 if [[ "${DRY_RUN}" == "1" ]]; then
+  TUNNEL_SUMMARY="quick (temporary trycloudflare.com hostname)"
+  if [[ "${TUNNEL_MODE}" == "named" ]]; then
+    TUNNEL_SUMMARY="named, fixed hostname https://${TUNNEL_HOSTNAME}"
+  fi
   cat <<EOF
 KataGo Remote One-Click ${VERSION}
 Target: ${INSTALL_HOME}
 Platform: Linux x86_64 with an NVIDIA GPU
+Tunnel: ${TUNNEL_SUMMARY}
 Downloads: service binary, cloudflared ${CLOUDFLARED_VERSION}, KataGo ${KATAGO_VERSION}, ${MODEL_NAME}
 Security: localhost-only listener, random private token, encrypted WSS tunnel
 EOF
@@ -214,12 +253,24 @@ fi
 
 say "4/5 Saving the private configuration / 保存私密配置"
 "${APP_PATH}" stop --home "${INSTALL_HOME}" >/dev/null 2>&1 || true
-"${APP_PATH}" init \
-  --home "${INSTALL_HOME}" \
-  --katago "${KATAGO_PATH}" \
-  --model "${MODEL_PATH}" \
-  --config "${CONFIG_PATH}" \
+INIT_ARGS=(
+  --home "${INSTALL_HOME}"
+  --katago "${KATAGO_PATH}"
+  --model "${MODEL_PATH}"
+  --config "${CONFIG_PATH}"
   --cloudflared "${CLOUDFLARED_PATH}"
+)
+if [[ "${TUNNEL_MODE}" == "named" ]]; then
+  INIT_ARGS+=(--tunnel-mode named --tunnel-hostname "${TUNNEL_HOSTNAME}")
+  if [[ -n "${TUNNEL_TOKEN_FILE}" ]]; then
+    INIT_ARGS+=(--tunnel-token-file "${TUNNEL_TOKEN_FILE}")
+    "${APP_PATH}" init "${INIT_ARGS[@]}"
+  else
+    printf '%s\n' "${TUNNEL_TOKEN}" | "${APP_PATH}" init "${INIT_ARGS[@]}" --tunnel-token-file -
+  fi
+else
+  "${APP_PATH}" init "${INIT_ARGS[@]}"
+fi
 
 mkdir -p "${USER_BIN_DIR}"
 if [[ ! -e "${USER_BIN_DIR}/katago-remote" || -L "${USER_BIN_DIR}/katago-remote" ]]; then

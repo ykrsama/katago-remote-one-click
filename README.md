@@ -8,11 +8,11 @@
 [![Release](https://img.shields.io/github/v/release/ykrsama/katago-remote-one-click)](https://github.com/ykrsama/katago-remote-one-click/releases/latest)
 [![License](https://img.shields.io/github/license/ykrsama/katago-remote-one-click)](LICENSE)
 
-[中文说明](README.zh-CN.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) | [Security](SECURITY.md)
+[中文说明](README.zh-CN.md) | [Fixed hostname](docs/FIXED-DOMAIN.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) | [Security](SECURITY.md)
 
 </div>
 
-No firewall rule, domain, TLS certificate, Python environment, or Cloudflare account is required. The installer prepares KataGo, a strong official Transformer model, an authenticated local bridge, and an encrypted temporary tunnel. It then prints the private WSS link and a QR code that LizzieYzy Next can use directly.
+No firewall rule, domain, TLS certificate, Python environment, or Cloudflare account is required. The installer prepares KataGo, a strong official Transformer model, an authenticated local bridge, and an encrypted temporary tunnel. It then prints the private WSS link and a QR code that LizzieYzy Next can use directly. To use your own Cloudflare domain as a permanent address, see [Fixed hostname](docs/FIXED-DOMAIN.md).
 
 ## One command
 
@@ -46,7 +46,7 @@ You can also use the guided notebook. Colab GPU availability and session duratio
 | --- | --- | --- |
 | KataGo | 1.18.2 CUDA 12.1 | Official analysis engine |
 | Transformer 10B | official medium model | Strong default model with practical GPU usage |
-| cloudflared | 2026.8.3 | Encrypted temporary WSS tunnel |
+| cloudflared | 2026.8.3 | Encrypted WSS tunnel (temporary or fixed hostname) |
 | katago-remote | 0.1.0 | Authenticated analysis-protocol bridge and service manager |
 
 Files are installed under `~/.local/share/katago-remote-one-click`. The bridge listens only on `127.0.0.1`; no inbound server port is opened. A random 256-bit token protects the WebSocket path, and only one client can use the engine at a time.
@@ -57,7 +57,7 @@ Files are installed under `~/.local/share/katago-remote-one-click`. The bridge l
 katago-remote show        # Show the current private link and QR code
 katago-remote status      # Check whether the service is running
 katago-remote logs        # Show recent diagnostics
-katago-remote restart     # Restart KataGo and create a new temporary hostname
+katago-remote restart     # Restart KataGo; a quick hostname changes, a fixed one does not
 katago-remote stop        # Stop KataGo and the tunnel
 katago-remote reset-link  # Revoke the old token and create a new private link
 katago-remote doctor      # Check GPU, files, and KataGo startup
@@ -70,6 +70,12 @@ If `katago-remote` is not found in a new terminal, run it as:
 ```
 
 The `trycloudflare.com` hostname is temporary and usually changes after a restart or server reboot. Run `katago-remote show`, then update the link in LizzieYzy Next.
+
+## Fixed hostname (optional)
+
+If your domain is hosted on Cloudflare, switch to a named tunnel and keep `wss://katago.ykrsama.org/katago/<private-token>` stable across restarts, reboots, and server IP changes.
+
+The ingress lives in the Cloudflare dashboard and `cloudflared` runs on the GPU server (production). Your development machine does not run it. See [Fixed hostname with your own Cloudflare domain](docs/FIXED-DOMAIN.md) for the full procedure.
 
 ## Use your own KataGo files
 
@@ -89,7 +95,7 @@ The paths must already exist on the server. The installer does not copy or modif
 
 ## Scope
 
-Version 0.1 supports Linux x86_64 NVIDIA GPU servers and clients that implement KataGo's line-delimited Analysis Engine protocol over WebSocket, including LizzieYzy Next and KaTrain-compatible clients. It does not support raw GTP-over-WebSocket, multi-user hosting, CPU-only servers, Windows servers, or permanent production tunnels.
+Version 0.1 supports Linux x86_64 NVIDIA GPU servers and clients that implement KataGo's line-delimited Analysis Engine protocol over WebSocket, including LizzieYzy Next and KaTrain-compatible clients. It does not support raw GTP-over-WebSocket, multi-user hosting, CPU-only servers, or Windows servers. A permanent address on your own domain is available through a [named tunnel](docs/FIXED-DOMAIN.md).
 
 See [the protocol and architecture notes](docs/PROTOCOL.md) for technical details and [troubleshooting](docs/TROUBLESHOOTING.md) for copy-and-run fixes.
 

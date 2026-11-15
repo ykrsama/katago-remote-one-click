@@ -6,7 +6,7 @@
 LizzieYzy Next or a compatible client
         |  WSS + private path token
         v
-Cloudflare Quick Tunnel
+Cloudflare Quick Tunnel or named tunnel (optional fixed hostname)
         |  HTTP/WebSocket on localhost only
         v
 katago-remote bridge
@@ -36,7 +36,7 @@ This prevents a reconnecting client from receiving results that belong to the pr
 - The bridge launches KataGo directly without a shell and accepts no remote command-line input.
 - The full private URL is printed only on explicit `start`, `show`, or `reset-link` commands and is omitted from service logs.
 
-Cloudflare terminates public TLS for the temporary tunnel. Quick Tunnels are suitable for personal and temporary sessions, not an SLA-backed multi-user service. Stop the service when it is not needed.
+Cloudflare terminates public TLS for both tunnel modes. A Quick Tunnel is suitable for personal and temporary sessions, not an SLA-backed multi-user service. A named tunnel serves a fixed hostname from your own Cloudflare domain; its token is stored under `state/tunnel-token` with mode `600` and passed to cloudflared through `TUNNEL_TOKEN` so it never appears in process arguments. In both modes the private path token remains the only access control. Stop the service when it is not needed.
 
 ## Compatibility
 

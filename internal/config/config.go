@@ -8,16 +8,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
 
 const (
-	ConfigFileName     = "config.json"
-	TokenFileName      = "state/access-token"
-	ConnectionFileName = "state/connection.json"
-	PIDFileName        = "state/service.json"
-	LogFileName        = "logs/service.log"
+	ConfigFileName      = "config.json"
+	TokenFileName       = "state/access-token"
+	TunnelTokenFileName = "state/tunnel-token"
+	ConnectionFileName  = "state/connection.json"
+	PIDFileName         = "state/service.json"
+	LogFileName         = "logs/service.log"
+
+	// TunnelModeQuick creates a temporary trycloudflare.com hostname.
+	TunnelModeQuick = "quick"
+	// TunnelModeNamed runs a Cloudflare tunnel token and serves a fixed hostname.
+	TunnelModeNamed = "named"
 )
 
 type Config struct {
@@ -26,6 +33,8 @@ type Config struct {
 	ModelPath         string        `json:"modelPath"`
 	AnalysisConfig    string        `json:"analysisConfig"`
 	CloudflaredPath   string        `json:"cloudflaredPath"`
+	TunnelMode        string        `json:"tunnelMode,omitempty"`
+	TunnelHostname    string        `json:"tunnelHostname,omitempty"`
 	MaxMessageBytes   int64         `json:"maxMessageBytes"`
 	MaxVisits         int64         `json:"maxVisits"`
 	StartupTimeoutSec int           `json:"startupTimeoutSeconds"`
@@ -38,6 +47,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Listen:            "127.0.0.1:8765",
+		TunnelMode:        TunnelModeQuick,
 		MaxMessageBytes:   4 << 20,
 		MaxVisits:         1_000_000,
 		StartupTimeoutSec: 45,
@@ -80,6 +90,21 @@ func (cfg Config) Validate() error {
 	if !strings.HasPrefix(cfg.Listen, "127.0.0.1:") && !strings.HasPrefix(cfg.Listen, "localhost:") {
 		return errors.New("listen address must remain on localhost")
 	}
+	mode, err := NormalizeTunnelMode(cfg.TunnelMode)
+	if err != nil {
+		return err
+	}
+	hostname := strings.TrimSpace(cfg.TunnelHostname)
+	switch mode {
+	case TunnelModeQuick:
+		if hostname != "" {
+			return errors.New("tunnelHostname requires tunnelMode \"named\"")
+		}
+	case TunnelModeNamed:
+		if err := ValidateTunnelHostname(hostname); err != nil {
+			return err
+		}
+	}
 	for name, value := range map[string]string{
 		"katagoPath":      cfg.KataGoPath,
 		"modelPath":       cfg.ModelPath,
@@ -108,6 +133,96 @@ func (cfg Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// NormalizeTunnelMode returns the effective tunnel mode and rejects unknown values.
+func NormalizeTunnelMode(value string) (string, error) {
+	switch mode := strings.ToLower(strings.TrimSpace(value)); mode {
+	case "", TunnelModeQuick:
+		return TunnelModeQuick, nil
+	case TunnelModeNamed:
+		return TunnelModeNamed, nil
+	default:
+		return "", fmt.Errorf("tunnelMode must be %q or %q", TunnelModeQuick, TunnelModeNamed)
+	}
+}
+
+// NamedTunnel reports whether the configuration serves a fixed Cloudflare hostname.
+func (cfg Config) NamedTunnel() bool {
+	mode, err := NormalizeTunnelMode(cfg.TunnelMode)
+	return err == nil && mode == TunnelModeNamed
+}
+
+var tunnelHostnamePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
+
+// ValidateTunnelHostname checks a public hostname such as katago.example.org.
+func ValidateTunnelHostname(value string) error {
+	hostname := strings.TrimSpace(value)
+	if hostname == "" {
+		return errors.New("tunnelHostname is required for a named tunnel")
+	}
+	if hostname != value || hostname != strings.ToLower(hostname) {
+		return fmt.Errorf("tunnelHostname %q must be lowercase without surrounding spaces", value)
+	}
+	if len(hostname) > 253 || !tunnelHostnamePattern.MatchString(hostname) {
+		return fmt.Errorf("tunnelHostname %q is not a plain DNS name; use only the hostname without scheme, port, or path", value)
+	}
+	if strings.HasSuffix(hostname, ".trycloudflare.com") {
+		return errors.New("tunnelHostname must belong to your own Cloudflare domain, not trycloudflare.com")
+	}
+	return nil
+}
+
+// MaxTunnelTokenBytes bounds the tunnel token accepted from flags, files, or environment.
+const MaxTunnelTokenBytes = 8 << 10
+
+// ValidateTunnelToken checks a Cloudflare Tunnel token before it is stored.
+func ValidateTunnelToken(token string) error {
+	if token == "" {
+		return errors.New("tunnel token is empty")
+	}
+	if len(token) > MaxTunnelTokenBytes {
+		return errors.New("tunnel token is too long")
+	}
+	if len(token) < 32 {
+		return errors.New("tunnel token is too short")
+	}
+	for _, character := range token {
+		if character <= ' ' || character > '~' {
+			return errors.New("tunnel token contains whitespace or control characters")
+		}
+	}
+	return nil
+}
+
+// SaveTunnelToken stores the Cloudflare Tunnel token with owner-only permissions.
+func SaveTunnelToken(home, token string) error {
+	if err := ValidateTunnelToken(token); err != nil {
+		return err
+	}
+	if err := EnsurePrivateDirs(home); err != nil {
+		return err
+	}
+	return atomicWrite(filepath.Join(home, TunnelTokenFileName), []byte(token+"\n"), 0o600)
+}
+
+// ReadTunnelToken loads the stored Cloudflare Tunnel token.
+func ReadTunnelToken(home string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(home, TunnelTokenFileName))
+	if err != nil {
+		return "", fmt.Errorf("read tunnel token: %w", err)
+	}
+	token := strings.TrimSpace(string(data))
+	if err := ValidateTunnelToken(token); err != nil {
+		return "", fmt.Errorf("tunnel token in %s: %w", filepath.Join(home, TunnelTokenFileName), err)
+	}
+	return token, nil
+}
+
+// HasTunnelToken reports whether a valid tunnel token file exists.
+func HasTunnelToken(home string) bool {
+	_, err := ReadTunnelToken(home)
+	return err == nil
 }
 
 func Save(home string, cfg Config) error {
